@@ -1,0 +1,239 @@
+package theme
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// ThemeConfig holds KDE theme configuration data
+type ThemeConfig struct {
+	ColorScheme       string `yaml:"color_scheme"`
+	WindowDecoration  string `yaml:"window_decoration"`
+	IconTheme         string `yaml:"icon_theme"`
+	CursorTheme       string `yaml:"cursor_theme"`
+	Font              string `yaml:"font"`
+	FontSize          int    `yaml:"font_size"`
+	Wallpaper         string `yaml:"wallpaper"`
+	LookAndFeel       string `yaml:"look_and_feel"`
+	GTKTheme          string `yaml:"gtk_theme"`
+	ApplicationTheme  string `yaml:"application_theme"`
+}
+
+// ExtractFromKdeglobals parses kdeglobals file for theme settings
+func ExtractFromKdeglobals(path string) (*ThemeConfig, error) {
+	cfg := &ThemeConfig{}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open kdeglobals: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	currentSection := ""
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip comments and empty lines
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Section header
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = line[1 : len(line)-1]
+			continue
+		}
+
+		// Key=Value pairs
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch currentSection {
+		case "General":
+			switch key {
+			case "ColorScheme":
+				cfg.ColorScheme = value
+			case "widgetStyle":
+				cfg.ApplicationTheme = value
+			}
+		case "WM":
+			switch key {
+			case "activeFont":
+				cfg.Font = value
+			}
+		case "Icons":
+			switch key {
+			case "Theme":
+				cfg.IconTheme = value
+			}
+		case "Mouse":
+			switch key {
+			case "cursorTheme":
+				cfg.CursorTheme = value
+			}
+		}
+	}
+
+	return cfg, scanner.Err()
+}
+
+// ExtractFromPlasmaRc parses plasmarc for look and feel settings
+func ExtractFromPlasmaRc(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open plasmarc: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	currentSection := ""
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = line[1 : len(line)-1]
+			continue
+		}
+
+		if currentSection == "Theme" {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 && strings.TrimSpace(parts[0]) == "name" {
+				return strings.TrimSpace(parts[1]), nil
+			}
+		}
+	}
+
+	return "", scanner.Err()
+}
+
+// ExtractWallpaperFromPlasmaDesktop parses the plasma desktop applet source for wallpaper
+func ExtractWallpaperFromPlasmaDesktop(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open plasma desktop config: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.Contains(line, "Image=") || strings.Contains(line, "wallpaper=") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1]), nil
+			}
+		}
+	}
+
+	return "", scanner.Err()
+}
+
+// Backup copies theme-related files to the destination directory
+func Backup(srcPaths map[string]string, destDir string) error {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	for name, srcPath := range srcPaths {
+		// Check if source exists
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // Skip non-existent files
+			}
+			return fmt.Errorf("failed to stat %s: %w", name, err)
+		}
+
+		destPath := filepath.Join(destDir, filepath.Base(srcPath))
+
+		if info.IsDir() {
+			if err := copyDir(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to copy directory %s: %w", name, err)
+			}
+		} else {
+			if err := copyFile(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to copy file %s: %w", name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// Restore copies theme files from the backup to their original locations
+func Restore(backupDir string, srcPaths map[string]string) error {
+	for name, destPath := range srcPaths {
+		srcFile := filepath.Join(backupDir, filepath.Base(destPath))
+
+		// Check if backup exists
+		if _, err := os.Stat(srcFile); os.IsNotExist(err) {
+			continue // Skip if backup doesn't exist
+		}
+
+		// Create parent directory if needed
+		parent := filepath.Dir(destPath)
+		if err := os.MkdirAll(parent, 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", name, err)
+		}
+
+		if err := copyFile(srcFile, destPath); err != nil {
+			return fmt.Errorf("failed to restore %s: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a single file from src to dst
+func copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0644)
+}
+
+// copyDir recursively copies a directory from src to dst
+func copyDir(src, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
