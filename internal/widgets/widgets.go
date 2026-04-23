@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -39,9 +40,9 @@ func ParseDesktopAppletSrc(path string) (*WidgetConfig, error) {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	currentWidget := ""
-	var widgets []WidgetInfo
 	isPanel := false
+	currentWidget := WidgetInfo{}
+	inAppletSection := false
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -53,8 +54,14 @@ func ParseDesktopAppletSrc(path string) (*WidgetConfig, error) {
 		// Section headers like [Containments][1][General] or [Containments][2][Applets][3][General]
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			// Save previous widget if any
-			if currentWidget != "" {
-				widgets = append(widgets, WidgetInfo{Name: currentWidget})
+			if currentWidget.Plugin != "" {
+				if isPanel {
+					cfg.PanelWidgets = append(cfg.PanelWidgets, currentWidget)
+				} else {
+					cfg.DesktopWidgets = append(cfg.DesktopWidgets, currentWidget)
+				}
+				currentWidget = WidgetInfo{}
+				inAppletSection = false
 			}
 
 			header := line[1 : len(line)-1]
@@ -63,44 +70,55 @@ func ParseDesktopAppletSrc(path string) (*WidgetConfig, error) {
 			if strings.Contains(header, "Containments") {
 				parts := strings.Split(header, "][")
 				if len(parts) >= 2 {
-					// Check containment type
-					if strings.Contains(header, "Applets") {
+					// Check containment type - panels typically have specific containment plugins
+					if strings.Contains(header, "org.kde.panel") || 
+					   strings.Contains(header, "org.kde.plasma.panel") {
+						isPanel = true
+					} else {
 						isPanel = false
-						widgetInfo := parseWidgetHeader(header)
-						if widgetInfo != "" {
-							currentWidget = widgetInfo
-						}
 					}
+				}
+			}
+
+			// Check if we're in an Applets section (widget configuration)
+			if strings.Contains(header, "Applets") {
+				inAppletSection = true
+				parts := strings.Split(header, "][")
+				if len(parts) >= 4 {
+					currentWidget.Name = parts[3] // Widget ID
 				}
 			}
 			continue
 		}
 
-		// Parse widget properties
-		if currentWidget != "" {
+		// Parse widget properties only in Applets sections
+		if inAppletSection {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) == 2 {
 				key := strings.TrimSpace(parts[0])
 				value := strings.TrimSpace(parts[1])
 
-				// Look for plugin name
-				if key == "plugin" {
-					widgets = append(widgets, WidgetInfo{
-						Plugin:   value,
-						IsCustom: !strings.HasPrefix(value, "org.kde."),
-					})
-					currentWidget = ""
+				switch key {
+				case "plugin":
+					currentWidget.Plugin = value
+					currentWidget.IsCustom = !strings.HasPrefix(value, "org.kde.")
+				case "position":
+					currentWidget.Position = value
+				case "size":
+					currentWidget.Size = value
+				case "config":
+					currentWidget.Config = value
 				}
 			}
 		}
 	}
 
-	// Determine widget types
-	for _, w := range widgets {
+	// Save last widget if any
+	if currentWidget.Plugin != "" {
 		if isPanel {
-			cfg.PanelWidgets = append(cfg.PanelWidgets, w)
+			cfg.PanelWidgets = append(cfg.PanelWidgets, currentWidget)
 		} else {
-			cfg.DesktopWidgets = append(cfg.DesktopWidgets, w)
+			cfg.DesktopWidgets = append(cfg.DesktopWidgets, currentWidget)
 		}
 	}
 
@@ -145,6 +163,147 @@ func ListInstalledWidgets(dataDir string) ([]WidgetInfo, error) {
 	}
 
 	return result, nil
+}
+
+// GetCustomWidgets returns only custom (non-system) widgets from a widget config
+func GetCustomWidgets(cfg *WidgetConfig) []WidgetInfo {
+	var custom []WidgetInfo
+	
+	for _, w := range cfg.DesktopWidgets {
+		if w.IsCustom {
+			custom = append(custom, w)
+		}
+	}
+	
+	for _, w := range cfg.PanelWidgets {
+		if w.IsCustom && !containsWidget(custom, w.Plugin) {
+			custom = append(custom, w)
+		}
+	}
+	
+	return custom
+}
+
+// containsWidget checks if a widget with given plugin name exists in the list
+func containsWidget(widgets []WidgetInfo, plugin string) bool {
+	for _, w := range widgets {
+		if w.Plugin == plugin {
+			return true
+		}
+	}
+	return false
+}
+
+// InstallWidget installs a widget from a .plasmoid package file
+func InstallWidget(packagePath, dataDir string) error {
+	// Check if plasmashell is available
+	cmd := exec.Command("plasmapkg2", "-i", packagePath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	if err := cmd.Run(); err != nil {
+		// Try fallback to older plasmapkg
+		cmd = exec.Command("plasmapkg", "-i", packagePath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to install widget %s: %w", packagePath, err)
+		}
+	}
+	
+	return nil
+}
+
+// InstallWidgetsFromBackup installs all custom widgets from backup
+func InstallWidgetsFromBackup(backupDir, dataDir string, dryRun bool) ([]string, error) {
+	var installed []string
+	var errors []string
+	
+	widgetsDir := filepath.Join(backupDir, "widgets", "plasma", "plasmoids")
+	
+	// Check if widgets directory exists
+	if _, err := os.Stat(widgetsDir); os.IsNotExist(err) {
+		return installed, nil // No widgets to install
+	}
+	
+	// Read widget directories
+	entries, err := os.ReadDir(widgetsDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read backup widgets directory: %w", err)
+	}
+	
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		
+		widgetName := entry.Name()
+		widgetPath := filepath.Join(widgetsDir, widgetName)
+		
+		// Check if already installed
+		installedWidgets, err := ListInstalledWidgets(dataDir)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to check installed widgets: %v", err))
+			continue
+		}
+		
+		isInstalled := false
+		for _, w := range installedWidgets {
+			if w.Plugin == widgetName {
+				isInstalled = true
+				break
+			}
+		}
+		
+		if isInstalled {
+			fmt.Printf("Widget %s is already installed, skipping...\n", widgetName)
+			continue
+		}
+		
+		if dryRun {
+			fmt.Printf("[DRY RUN] Would install widget: %s\n", widgetName)
+			installed = append(installed, widgetName)
+			continue
+		}
+		
+		// Try to install using plasmapkg2 if there's a .plasmoid package
+		packageFile := filepath.Join(widgetPath, "contents", "code", "main.qml")
+		if _, err := os.Stat(packageFile); err == nil {
+			// This is an unpacked widget, need to package it first or copy directly
+			destPath := filepath.Join(dataDir, "plasma", "plasmoids", widgetName)
+			if err := copyDir(widgetPath, destPath); err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to copy widget %s: %v", widgetName, err))
+				continue
+			}
+			installed = append(installed, widgetName)
+			fmt.Printf("Installed widget: %s\n", widgetName)
+		} else {
+			// Look for .plasmoid package file
+			plasmoidFile := filepath.Join(widgetPath, widgetName+".plasmoid")
+			if _, err := os.Stat(plasmoidFile); err == nil {
+				if err := InstallWidget(plasmoidFile, dataDir); err != nil {
+					errors = append(errors, fmt.Sprintf("Failed to install widget %s: %v", widgetName, err))
+					continue
+				}
+				installed = append(installed, widgetName)
+			} else {
+				// Direct copy as fallback
+				destPath := filepath.Join(dataDir, "plasma", "plasmoids", widgetName)
+				if err := copyDir(widgetPath, destPath); err != nil {
+					errors = append(errors, fmt.Sprintf("Failed to copy widget %s: %v", widgetName, err))
+					continue
+				}
+				installed = append(installed, widgetName)
+				fmt.Printf("Installed widget (direct copy): %s\n", widgetName)
+			}
+		}
+	}
+	
+	if len(errors) > 0 {
+		return installed, fmt.Errorf("errors during installation: %v", errors)
+	}
+	
+	return installed, nil
 }
 
 // Backup copies widget configuration files

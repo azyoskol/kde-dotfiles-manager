@@ -1,33 +1,48 @@
 ```
-# Dependencies
-go.sum
-
-# Build artifacts
+# Compiled and build artifacts
 *.o
 *.obj
 *.out
+
+# Dependencies
+vendor/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
 
-# Environment
-.env
-.env.local
-*.env.*
-
 # Editors
 .vscode/
 .idea/
+
+# Environment
+.env
+.env.local
+.env.*
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Cache
+# Build directories
+bin/
+dist/
+build/
+target/
+
+# Package management
+node_modules/
 __pycache__/
 .mypy_cache/
 .pytest_cache/
+.gradle/
+.cargo/
+zig-cache/
+.julia/
+
+# System files
+.DS_Store
+Thumbs.db
 ```

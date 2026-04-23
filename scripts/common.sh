@@ -197,11 +197,13 @@ get_theme_files() {
     echo "${KDE_CONFIG_DIR}/gtkrc"
     echo "${KDE_CONFIG_DIR}/gtk-3.0/settings.ini"
     echo "${KDE_CONFIG_DIR}/gtk-4.0/settings.ini"
+    echo "${KDE_CONFIG_DIR}/kwinrc"  # Contains window decoration settings
     echo "${KDE_DATA_DIR}/color-schemes"
     echo "${KDE_DATA_DIR}/wallpapers"
     echo "${KDE_DATA_DIR}/icons"
     echo "${KDE_DATA_DIR}/plasma/look-and-feel"
     echo "${KDE_DATA_DIR}/aurorae/themes"
+    echo "${KDE_DATA_DIR}/plasma/desktoptheme"
 }
 
 # Get list of language/locale configuration files
@@ -215,6 +217,7 @@ get_language_files() {
 # Get list of widget configuration files
 get_widget_files() {
     echo "${KDE_DATA_DIR}/plasma/org.kde.plasma.desktop-appletsrc"
+    echo "${KDE_DATA_DIR}/plasma/org.kde.panel-appletsrc"
     echo "${KDE_DATA_DIR}/plasma/plasmoids"
     echo "${KDE_DATA_DIR}/plasma/layout-templates"
     echo "${KDE_DATA_DIR}/plasma/packages"
