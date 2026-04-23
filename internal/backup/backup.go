@@ -158,7 +158,7 @@ func (m *Manager) Restore(profile string) error {
 	}
 
 	// Get all available categories
-	categories := []string{"shortcuts", "themes", "window_management", "languages", "widgets", "panels", "system_settings"}
+	categories := []string{"shortcuts", "window_management", "languages", "widgets", "panels", "system_settings"}
 
 	for _, category := range categories {
 		backupDir := filepath.Join(profilePath, category)
@@ -171,23 +171,20 @@ func (m *Manager) Restore(profile string) error {
 		}
 	}
 
-	// Special handling for cursor themes - they are stored in the same directory as icons
-	// but need to be restored separately to ensure proper restoration
-	cursorBackupDir := filepath.Join(profilePath, "themes", "cursor themes")
-	if _, err := os.Stat(cursorBackupDir); err == nil {
-		// Cursor themes backup exists, restore it explicitly
-		destPath := m.kdePaths.DataDir + "/icons"
-		if err := m.restoreCursorThemes(cursorBackupDir, destPath); err != nil {
-			return fmt.Errorf("failed to restore cursor themes: %w", err)
+	// Special handling for themes - restore in specific order to handle icons/cursors correctly
+	themesBackupDir := filepath.Join(profilePath, "themes")
+	if _, err := os.Stat(themesBackupDir); err == nil {
+		if err := m.restoreThemes(themesBackupDir); err != nil {
+			return fmt.Errorf("failed to restore themes: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// restoreCategory restores all files from backup directory to their original locations
-// It walks through the backup directory and uses the relative path to determine destination
-func (m *Manager) restoreCategory(name, backupDir string) error {
+// restoreThemes restores all theme-related files including icons, cursors, color schemes, etc.
+// This is a special function to handle the complex structure of theme backups
+func (m *Manager) restoreThemes(backupDir string) error {
 	// Walk through all files in backup directory
 	return filepath.Walk(backupDir, func(srcPath string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -205,15 +202,10 @@ func (m *Manager) restoreCategory(name, backupDir string) error {
 			return fmt.Errorf("failed to calculate relative path: %w", err)
 		}
 
-		// Determine destination based on category and relative path
-		destPath := m.getDestinationForRestore(name, relPath)
+		// Determine destination based on relative path
+		destPath := m.getThemeDestination(relPath)
 		if destPath == "" {
 			return nil // Skip if we can't determine destination
-		}
-
-		// Skip if already processed (for symlinks that might be visited twice)
-		if _, err := os.Lstat(destPath); err == nil {
-			// Destination exists, will be overwritten
 		}
 
 		// Create parent directories
@@ -222,14 +214,16 @@ func (m *Manager) restoreCategory(name, backupDir string) error {
 		}
 
 		// Remove existing destination if it exists (to handle type changes)
-		if info, err := os.Lstat(destPath); err == nil {
-			if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
-				if err := os.RemoveAll(destPath); err != nil {
-					return fmt.Errorf("failed to remove existing directory %s: %w", destPath, err)
-				}
-			} else {
-				if err := os.Remove(destPath); err != nil {
-					return fmt.Errorf("failed to remove existing file %s: %w", destPath, err)
+		if _, err := os.Lstat(destPath); err == nil {
+			if info, err := os.Lstat(destPath); err == nil {
+				if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+					if err := os.RemoveAll(destPath); err != nil {
+						return fmt.Errorf("failed to remove existing directory %s: %w", destPath, err)
+					}
+				} else {
+					if err := os.Remove(destPath); err != nil {
+						return fmt.Errorf("failed to remove existing file %s: %w", destPath, err)
+					}
 				}
 			}
 		}
@@ -246,16 +240,74 @@ func (m *Manager) restoreCategory(name, backupDir string) error {
 		// Copy based on type
 		if isDir {
 			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
-				return fmt.Errorf("failed to restore directory %s: %w", destPath, err)
+				return fmt.Errorf("failed to restore theme directory %s: %w", destPath, err)
 			}
 		} else {
 			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
-				return fmt.Errorf("failed to restore file %s: %w", destPath, err)
+				return fmt.Errorf("failed to restore theme file %s: %w", destPath, err)
 			}
 		}
 
 		return nil
 	})
+}
+
+// getThemeDestination determines the destination path for a theme-related relative path
+func (m *Manager) getThemeDestination(relPath string) string {
+	// Handle specific theme subdirectories
+	switch {
+	case relPath == "icons" || strings.HasPrefix(relPath, "icons/"):
+		// Icons and cursor themes go to DataDir/icons
+		if relPath == "icons" {
+			return m.kdePaths.DataDir + "/icons"
+		}
+		return m.kdePaths.DataDir + "/icons/" + strings.TrimPrefix(relPath, "icons/")
+	
+	case relPath == "color-schemes" || strings.HasPrefix(relPath, "color-schemes/"):
+		if relPath == "color-schemes" {
+			return m.kdePaths.DataDir + "/color-schemes"
+		}
+		return m.kdePaths.DataDir + "/color-schemes/" + strings.TrimPrefix(relPath, "color-schemes/")
+	
+	case relPath == "wallpapers" || strings.HasPrefix(relPath, "wallpapers/"):
+		if relPath == "wallpapers" {
+			return m.kdePaths.DataDir + "/wallpapers"
+		}
+		return m.kdePaths.DataDir + "/wallpapers/" + strings.TrimPrefix(relPath, "wallpapers/")
+	
+	case relPath == "fonts" || strings.HasPrefix(relPath, "fonts/"):
+		if relPath == "fonts" {
+			return m.kdePaths.DataDir + "/fonts"
+		}
+		return m.kdePaths.DataDir + "/fonts/" + strings.TrimPrefix(relPath, "fonts/")
+	
+	case relPath == "sounds" || strings.HasPrefix(relPath, "sounds/"):
+		if relPath == "sounds" {
+			return m.kdePaths.DataDir + "/sounds"
+		}
+		return m.kdePaths.DataDir + "/sounds/" + strings.TrimPrefix(relPath, "sounds/")
+	
+	case relPath == "plasma/look-and-feel" || strings.HasPrefix(relPath, "plasma/look-and-feel/"):
+		if relPath == "plasma/look-and-feel" {
+			return m.kdePaths.DataDir + "/plasma/look-and-feel"
+		}
+		return m.kdePaths.DataDir + "/plasma/look-and-feel/" + strings.TrimPrefix(relPath, "plasma/look-and-feel/")
+	
+	case relPath == "aurorae/themes" || strings.HasPrefix(relPath, "aurorae/themes/"):
+		if relPath == "aurorae/themes" {
+			return m.kdePaths.DataDir + "/aurorae/themes"
+		}
+		return m.kdePaths.DataDir + "/aurorae/themes/" + strings.TrimPrefix(relPath, "aurorae/themes/")
+	
+	default:
+		// For other theme files (kdeglobals, plasmarc, etc.), use config dir
+		basePath := m.getFirstExistingPath(m.kdePaths.ThemePaths())
+		if basePath == "" {
+			return ""
+		}
+		baseDir := filepath.Dir(basePath)
+		return filepath.Join(baseDir, relPath)
+	}
 }
 
 // getDestinationForRestore determines the destination path for a given category and relative path
@@ -355,10 +407,10 @@ func (m *Manager) getFirstExistingPath(paths map[string]string) string {
 	return ""
 }
 
-// restoreCursorThemes restores cursor themes from backup to the destination directory
-// This is a special case because cursor themes and icons share the same directory
-func (m *Manager) restoreCursorThemes(backupDir, destDir string) error {
-	// Walk through all files in the cursor themes backup
+// restoreCategory restores all files from backup directory to their original locations
+// It walks through the backup directory and uses the relative path to determine destination
+func (m *Manager) restoreCategory(name, backupDir string) error {
+	// Walk through all files in backup directory
 	return filepath.Walk(backupDir, func(srcPath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -375,8 +427,11 @@ func (m *Manager) restoreCursorThemes(backupDir, destDir string) error {
 			return fmt.Errorf("failed to calculate relative path: %w", err)
 		}
 
-		// Build destination path
-		destPath := filepath.Join(destDir, relPath)
+		// Determine destination based on category and relative path
+		destPath := m.getDestinationForRestore(name, relPath)
+		if destPath == "" {
+			return nil // Skip if we can't determine destination
+		}
 
 		// Create parent directories
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -410,11 +465,11 @@ func (m *Manager) restoreCursorThemes(backupDir, destDir string) error {
 		// Copy based on type
 		if isDir {
 			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
-				return fmt.Errorf("failed to restore cursor theme directory %s: %w", destPath, err)
+				return fmt.Errorf("failed to restore directory %s: %w", destPath, err)
 			}
 		} else {
 			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
-				return fmt.Errorf("failed to restore cursor theme file %s: %w", destPath, err)
+				return fmt.Errorf("failed to restore file %s: %w", destPath, err)
 			}
 		}
 
