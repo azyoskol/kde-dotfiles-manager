@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/user/kde-dotfiles-manager/internal/config"
 	"github.com/user/kde-dotfiles-manager/internal/fileutil"
@@ -30,7 +29,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	}, nil
 }
 
-// Backup executes backup for specified categories using goroutines for parallel processing
+// Backup executes backup for specified categories sequentially
 func (m *Manager) Backup(categories []string) error {
 	dotfilesDir := m.cfg.GetProfileDotfilesDir()
 
@@ -39,15 +38,13 @@ func (m *Manager) Backup(categories []string) error {
 		return fmt.Errorf("failed to create dotfiles directory: %w", err)
 	}
 
-	// Define workItem type before using it
-	type workItem struct {
-		src  string
-		dst  string
-	}
-
 	// Collect all work items - a file may need to be copied to multiple categories
 	// Use a map to track unique src->dst pairs to avoid duplicate work
 	seen := make(map[string]bool) // Track unique src+dst combinations
+	type workItem struct {
+		src string
+		dst string
+	}
 	var workItems []workItem
 
 	for _, category := range categories {
@@ -120,77 +117,40 @@ func (m *Manager) Backup(categories []string) error {
 		}
 	}
 
-	// Use WaitGroup to wait for all goroutines to complete
-	var wg sync.WaitGroup
-	errorChan := make(chan error, len(workItems)+len(categories)) // Sufficient buffer
-
-	// Create a mutex for synchronizing directory creation
-	var mkdirMu sync.Mutex
-
-	// Create goroutines for each unique source file
+	// Process all work items sequentially
 	for _, item := range workItems {
-		wg.Add(1)
-		go func(src, dst string) {
-			defer wg.Done()
-			
-			info, err := os.Lstat(src)
-			if err != nil {
-				if os.IsNotExist(err) {
-					return // File doesn't exist, skip silently
-				}
-				errorChan <- fmt.Errorf("failed to stat %s: %w", src, err)
-				return
+		info, err := os.Lstat(item.src)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // File doesn't exist, skip silently
 			}
-
-			// Create parent directories with mutex to avoid race conditions
-			mkdirMu.Lock()
-			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-				mkdirMu.Unlock()
-				errorChan <- fmt.Errorf("failed to create directory for %s: %w", dst, err)
-				return
-			}
-			mkdirMu.Unlock()
-
-			// Check if it's a directory or a symlink to a directory
-			isDir := info.IsDir()
-			if !isDir && info.Mode()&os.ModeSymlink != 0 {
-				// For symlinks, check if target is a directory
-				targetInfo, err := os.Stat(src)
-				if err == nil && targetInfo.IsDir() {
-					isDir = true
-				}
-			}
-
-			if isDir {
-				if err := fileutil.CopyDir(src, dst); err != nil {
-					errorChan <- fmt.Errorf("failed to copy directory %s: %w", src, err)
-				}
-			} else {
-				if err := fileutil.CopyFile(src, dst); err != nil {
-					errorChan <- fmt.Errorf("failed to copy file %s: %w", src, err)
-				}
-			}
-		}(item.src, item.dst)
-	}
-
-	// Start a separate goroutine to close the channel after all workers complete
-	go func() {
-		wg.Wait()
-		close(errorChan)
-	}()
-
-	// Collect any errors - this blocks until all goroutines complete and channel is closed
-	var errors []error
-	for err := range errorChan {
-		errors = append(errors, err)
-	}
-
-	if len(errors) > 0 {
-		// Return the first error, but log all of them
-		for _, err := range errors[1:] {
-			fmt.Printf("Additional error: %v\n", err)
+			return fmt.Errorf("failed to stat %s: %w", item.src, err)
 		}
-		return errors[0]
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(item.dst), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", item.dst, err)
+		}
+
+		// Check if it's a directory or a symlink to a directory
+		isDir := info.IsDir()
+		if !isDir && info.Mode()&os.ModeSymlink != 0 {
+			// For symlinks, check if target is a directory
+			targetInfo, err := os.Stat(item.src)
+			if err == nil && targetInfo.IsDir() {
+				isDir = true
+			}
+		}
+
+		if isDir {
+			if err := fileutil.CopyDir(item.src, item.dst); err != nil {
+				return fmt.Errorf("failed to copy directory %s: %w", item.src, err)
+			}
+		} else {
+			if err := fileutil.CopyFile(item.src, item.dst); err != nil {
+				return fmt.Errorf("failed to copy file %s: %w", item.src, err)
+			}
+		}
 	}
 
 	return nil
