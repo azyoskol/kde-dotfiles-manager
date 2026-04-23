@@ -1,49 +1,20 @@
-```
-# Build artifacts
-*.o
-*.obj
-*.a
-*.so
-*.dll
-*.exe
-*.out
+# Documentation files are source content - no need to ignore them
+# The added files (docs/*.md) and modified file (README.md) are documentation/source files
+# No build artifacts, dependencies, or temporary files detected in changes
 
 # Dependencies
 vendor/
 node_modules/
-__pycache__/
-*.egg-info/
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Logs
-*.log
-*.out
-*.pid
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Environment variables
+venv/
+.venv/
 .env
 .env.local
 .env.*
 !.env.example
 
-# IDE specific
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-nbproject/
 
 # Coverage reports
 coverage/
@@ -52,19 +23,9 @@ htmlcov/
 *.cover
 coverage.xml
 
-# Distribution / packaging
-dist/
-build/
-*.tar.gz
-*.whl
-*.egg
-
-# Python
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.pytest_cache/
-.mypy_cache/
+# Backup and temporary directories
+backup_*/
+temp_*/
+*.bak
+*.tmp
 ```
