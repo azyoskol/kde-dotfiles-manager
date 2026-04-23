@@ -39,9 +39,14 @@ func (m *Manager) Backup(categories []string) error {
 		return fmt.Errorf("failed to create dotfiles directory: %w", err)
 	}
 
-	// Collect all unique source paths across all categories to avoid duplicates
-	uniqueSrcPaths := make(map[string]string) // srcPath -> destPath
-	categoryDestDirs := make(map[string]string) // category -> destDir
+	// Define workItem type before using it
+	type workItem struct {
+		src  string
+		dst  string
+	}
+
+	// Collect all work items - a file may need to be copied to multiple categories
+	var workItems []workItem
 
 	for _, category := range categories {
 		var srcPaths map[string]string
@@ -73,8 +78,6 @@ func (m *Manager) Backup(categories []string) error {
 			continue
 		}
 
-		categoryDestDirs[category] = destDir
-
 		// Add all source paths for this category
 		for _, srcPath := range srcPaths {
 			// Determine destination path within category
@@ -92,21 +95,9 @@ func (m *Manager) Backup(categories []string) error {
 			
 			destPath := filepath.Join(destDir, relPath)
 			
-			// Store the mapping - if file is in multiple categories, 
-			// it will be copied to each category's directory
-			uniqueSrcPaths[srcPath] = destPath
+			// Add work item - same source file may be copied to multiple destinations
+			workItems = append(workItems, workItem{src: srcPath, dst: destPath})
 		}
-	}
-
-	// Create a slice of work items to avoid closure issues
-	type workItem struct {
-		src  string
-		dst  string
-	}
-	
-	workItems := make([]workItem, 0, len(uniqueSrcPaths))
-	for srcPath, destPath := range uniqueSrcPaths {
-		workItems = append(workItems, workItem{src: srcPath, dst: destPath})
 	}
 
 	// Use WaitGroup to wait for all goroutines to complete
