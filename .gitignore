@@ -16,25 +16,43 @@ vendor/
 .env.local
 *.env.*
 
+# Editors
+.vscode/
+.idea/
+
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Editor/IDE
-.vscode/
-.idea/
+# Distribution
+dist/
+build/
+target/
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Go specific
+*.exe
+*.dll
+*.so
+*.a
+
+# Gradle
+.gradle/
+
+# MyPy
+.mypy_cache/
+
+# Pytest
+.pytest_cache/
+
+# Temporary files
 *.swp
 *.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Build/cache directories
-build/
-dist/
-target/
-.mypy_cache/
-.pytest_cache/
+*~
 ```
