@@ -367,3 +367,53 @@ func (m *Manager) InstallCustomWidgets(dryRun bool) ([]string, error) {
 	dotfilesDir := m.cfg.GetProfileDotfilesDir()
 	return widgets.InstallWidgetsFromBackup(dotfilesDir, m.kdePaths.DataDir, dryRun)
 }
+
+// GetBackupSize calculates the total size of a backup profile in bytes
+func (m *Manager) GetBackupSize(profile string) (uint64, error) {
+	dotfilesDir := m.cfg.GetProfileDotfilesDir()
+	
+	// For default profile, construct the full path
+	var profilePath string
+	if m.cfg.Profile == "" || m.cfg.Profile == "default" {
+		baseDir := m.cfg.ExpandPath()
+		profilePath = filepath.Join(baseDir, profile)
+	} else {
+		profilePath = dotfilesDir
+	}
+	
+	// Check if profile directory exists
+	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
+		return 0, fmt.Errorf("profile '%s' does not exist", profile)
+	}
+	
+	var totalSize uint64
+	err := filepath.Walk(profilePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && !strings.Contains(path, "/.git/") {
+			totalSize += uint64(info.Size())
+		}
+		return nil
+	})
+	
+	if err != nil {
+		return 0, fmt.Errorf("failed to calculate backup size: %w", err)
+	}
+	
+	return totalSize, nil
+}
+
+// FormatSize formats bytes into human-readable string
+func FormatSize(bytes uint64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := uint64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.2f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}

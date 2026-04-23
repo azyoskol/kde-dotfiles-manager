@@ -7,19 +7,14 @@
 *.so
 *.a
 *.out
-# Documentation files are source content - no need to ignore them
-# The added files (docs/*.md) and modified file (README.md) are documentation/source files
-# No build artifacts, dependencies, or temporary files detected in changes
 
 # Dependencies
-vendor/
 node_modules/
 venv/
 .venv/
 __pycache__/
-*.egg-info/
-build/
-dist/
+.mypy_cache/
+.pytest_cache/
 target/
 .gradle/
 
@@ -37,27 +32,37 @@ target/
 # Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# OS
+# System files
 .DS_Store
 Thumbs.db
-```
-# Editors
-.vscode/
-.idea/
 
-# Coverage reports
+# Coverage
 coverage/
 htmlcov/
 .coverage
-*.cover
-coverage.xml
 
-# Backup and temporary directories
-backup_*/
-temp_*/
-*.bak
-*.tmp
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
