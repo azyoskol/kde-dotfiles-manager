@@ -82,13 +82,15 @@ func (m *Manager) backupCategory(name string, srcPaths map[string]string, destDi
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
+	var errors []string
 	for name, srcPath := range srcPaths {
 		info, err := os.Stat(srcPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return fmt.Errorf("failed to stat %s: %w", name, err)
+			errors = append(errors, fmt.Sprintf("failed to stat %s: %v", name, err))
+			continue
 		}
 
 		// Determine destination path
@@ -103,17 +105,27 @@ func (m *Manager) backupCategory(name string, srcPaths map[string]string, destDi
 
 		// Create parent directories
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", name, err)
+			errors = append(errors, fmt.Sprintf("failed to create directory for %s: %v", name, err))
+			continue
 		}
 
 		if info.IsDir() {
 			if err := copyDir(srcPath, destPath); err != nil {
-				return fmt.Errorf("failed to copy directory %s: %w", name, err)
+				errors = append(errors, fmt.Sprintf("failed to copy directory %s: %v", name, err))
+				continue
 			}
 		} else {
 			if err := copyFile(srcPath, destPath); err != nil {
-				return fmt.Errorf("failed to copy file %s: %w", name, err)
+				errors = append(errors, fmt.Sprintf("failed to copy file %s: %v", name, err))
+				continue
 			}
+		}
+	}
+
+	if len(errors) > 0 {
+		fmt.Printf("Warnings during backup of %s:\n", name)
+		for _, err := range errors {
+			fmt.Printf("  - %s\n", err)
 		}
 	}
 
@@ -212,6 +224,14 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
+	// Check if destination already exists
+	if _, err := os.Lstat(dst); err == nil {
+		// Destination exists, remove it first
+		if err := os.RemoveAll(dst); err != nil {
+			return fmt.Errorf("failed to remove existing destination %s: %w", dst, err)
+		}
+	}
+
 	// Handle symbolic links
 	if info.Mode()&os.ModeSymlink != 0 {
 		linkTarget, err := os.Readlink(src)
@@ -259,6 +279,13 @@ func copyDir(src, dst string) error {
 		info, err := os.Lstat(srcPath)
 		if err != nil {
 			return fmt.Errorf("failed to stat %s: %w", srcPath, err)
+		}
+
+		// Check if destination already exists and remove it
+		if _, err := os.Lstat(dstPath); err == nil {
+			if err := os.RemoveAll(dstPath); err != nil {
+				return fmt.Errorf("failed to remove existing destination %s: %w", dstPath, err)
+			}
 		}
 
 		// Handle symbolic links
