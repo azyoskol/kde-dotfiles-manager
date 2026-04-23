@@ -273,6 +273,15 @@ main() {
     echo ""
     log_success "Restored ${total_restored} categories from profile: ${PROFILE}"
     log_info "You may need to log out and log back in for all changes to take effect"
+    
+    # Check for custom widgets
+    local widgets_backup="${backup_dir}/widgets/plasma/plasmoids"
+    if [[ -d "${widgets_backup}" ]]; then
+        echo ""
+        log_info "Custom widgets found in backup. They will be installed automatically."
+        log_info "If you encounter any issues, you can manually install widgets from:"
+        log_info "  ${widgets_backup}"
+    fi
 }
 
 main "$@"

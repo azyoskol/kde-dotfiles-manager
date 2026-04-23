@@ -46,7 +46,6 @@ func (p *Paths) KWinPaths() map[string]string {
 		"kwinrulesrc":           p.ConfigDir + "/kwinrulesrc",
 		"kwin scripting":        p.DataDir + "/kwin/scripts",
 		"kwin effects":          p.DataDir + "/kwin/effects",
-		"kwin desktop effects":  p.ConfigDir + "/kwin-effects-rc",
 		"virtual desktops":      p.ConfigDir + "/kdeglobals", // section [Desktops]
 		"window behavior":       p.ConfigDir + "/kwinrc",
 		"window rules":          p.ConfigDir + "/kwinrulesrc",
@@ -80,6 +79,7 @@ func (p *Paths) ThemePaths() map[string]string {
 		"look and feel":       p.DataDir + "/plasma/look-and-feel",
 		"window decorations":  p.DataDir + "/aurorae/themes",
 		"cursor themes":       p.DataDir + "/icons",
+		"kwinrc":              p.ConfigDir + "/kwinrc", // Contains window decoration settings
 	}
 }
 
@@ -99,10 +99,11 @@ func (p *Paths) LocalePaths() map[string]string {
 // WidgetPaths returns paths for widget configuration
 func (p *Paths) WidgetPaths() map[string]string {
 	return map[string]string{
-		"plasma widgets":     p.DataDir + "/plasma/plasmoids",
-		"plasma layout":      p.DataDir + "/plasma/layout-templates",
-		"plasma packages":    p.DataDir + "/plasma/packages",
-		"desktop containment": p.DataDir + "/plasma/org.kde.plasma.desktop-appletsrc",
+		"plasma widgets":         p.DataDir + "/plasma/plasmoids",
+		"plasma layout":          p.DataDir + "/plasma/layout-templates",
+		"plasma packages":        p.DataDir + "/plasma/packages",
+		"desktop containment":    p.DataDir + "/plasma/org.kde.plasma.desktop-appletsrc",
+		"panel containment":      p.DataDir + "/plasma/org.kde.panel-appletsrc",
 	}
 }
 

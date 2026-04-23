@@ -130,13 +130,28 @@ func ExtractWallpaperFromPlasmaDesktop(path string) (string, error) {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	currentSection := ""
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(line, "Image=") || strings.Contains(line, "wallpaper=") {
+
+		// Track sections to find wallpaper settings in containment sections
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = line[1 : len(line)-1]
+			continue
+		}
+
+		// Look for wallpaper settings in various formats
+		if strings.Contains(currentSection, "Containments") {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1]), nil
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+				
+				// Check for common wallpaper keys
+				if key == "Image" || key == "wallpaper" || key == "wallpaperimage" {
+					return value, nil
+				}
 			}
 		}
 	}
