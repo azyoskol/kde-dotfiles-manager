@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/user/kde-dotfiles-manager/internal/config"
 	"github.com/user/kde-dotfiles-manager/internal/kde"
 	"github.com/user/kde-dotfiles-manager/internal/backup"
@@ -23,6 +24,8 @@ type backupScreen struct {
 	messageType string // "success", "error", "info"
 	width      int
 	height     int
+	spinner    spinner.Model
+	isBackingUp bool
 }
 
 // categoryItem represents a backup category
@@ -50,6 +53,7 @@ func newBackupScreen(parent *model) *backupScreen {
 		backupMgr: backupMgr,
 		selected:  make(map[int]bool),
 		cursor:    0,
+		spinner:   spinner.New(),
 	}
 
 	// Initialize categories
@@ -88,19 +92,50 @@ func (s *backupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.height = msg.Height
 		return s, nil
 
+	case spinner.TickMsg:
+		if !s.isBackingUp {
+			break
+		}
+		var cmd tea.Cmd
+		s.spinner, cmd = s.spinner.Update(msg)
+		return s, cmd
+
+	case backupDoneMsg:
+		s.isBackingUp = false
+		if msg.err != nil {
+			s.message = fmt.Sprintf("Backup failed: %v", msg.err)
+			s.messageType = "error"
+		} else {
+			s.message = fmt.Sprintf("Backup completed successfully for: %s", strings.Join(msg.categories, ", "))
+			s.messageType = "success"
+		}
+		return s, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc", "q":
+			if s.isBackingUp {
+				return s, nil // Don't allow exit during backup
+			}
 			return s.parent, nil
 		case "up", "k":
+			if s.isBackingUp {
+				return s, nil // Don't allow navigation during backup
+			}
 			if s.cursor > 0 {
 				s.cursor--
 			}
 		case "down", "j":
+			if s.isBackingUp {
+				return s, nil // Don't allow navigation during backup
+			}
 			if s.cursor < len(s.categories)-1 {
 				s.cursor++
 			}
 		case " ", "enter":
+			if s.isBackingUp {
+				return s, nil // Don't allow actions during backup
+			}
 			if s.cursor == len(s.categories)-1 {
 				// Execute backup
 				return s.executeBackup()
@@ -117,21 +152,26 @@ func (s *backupScreen) View() string {
 
 	b.WriteString(titleStyle.Render("Backup KDE Configurations"))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Select categories to backup (Space to toggle, Enter to start)"))
-	b.WriteString("\n\n")
+	
+	if s.isBackingUp {
+		b.WriteString(s.spinner.View() + " Backup in progress...\n\n")
+	} else {
+		b.WriteString(subtitleStyle.Render("Select categories to backup (Space to toggle, Enter to start)"))
+		b.WriteString("\n\n")
+	}
 
 	// Category list
 	execIndex := len(s.categories) - 1
 	for i, cat := range s.categories {
 		cursor := "  "
-		if i == s.cursor {
+		if i == s.cursor && !s.isBackingUp {
 			cursor = "> "
 		}
 
 		// Last item is the execute button, not a toggleable category
 		if i == execIndex {
 			line := fmt.Sprintf("%s[ Execute Backup ]", cursor)
-			if i == s.cursor {
+			if i == s.cursor && !s.isBackingUp {
 				b.WriteString(selectedStyle.Render(line))
 			} else {
 				b.WriteString(normalStyle.Render(line))
@@ -146,7 +186,7 @@ func (s *backupScreen) View() string {
 		}
 
 		line := fmt.Sprintf("%s%s %s - %s", cursor, checkbox, cat.name, cat.description)
-		if i == s.cursor {
+		if i == s.cursor && !s.isBackingUp {
 			b.WriteString(selectedStyle.Render(line))
 		} else {
 			b.WriteString(normalStyle.Render(line))
@@ -154,17 +194,19 @@ func (s *backupScreen) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n")
+	if !s.isBackingUp {
+		b.WriteString("\n")
 
-	// Backup button
-	buttonLabel := "[ Execute Backup ]"
-	if s.cursor == len(s.categories) {
-		b.WriteString(buttonStyle.Render(buttonLabel))
-	} else {
-		b.WriteString(buttonInactiveStyle.Render(buttonLabel))
+		// Backup button
+		buttonLabel := "[ Execute Backup ]"
+		if s.cursor == len(s.categories) {
+			b.WriteString(buttonStyle.Render(buttonLabel))
+		} else {
+			b.WriteString(buttonInactiveStyle.Render(buttonLabel))
+		}
+
+		b.WriteString("\n\n")
 	}
-
-	b.WriteString("\n\n")
 
 	// Message display
 	if s.message != "" {
@@ -178,9 +220,17 @@ func (s *backupScreen) View() string {
 		}
 	}
 
-	b.WriteString("\n\n  Press esc to go back • ↑↓ to navigate • Space to toggle")
+	if !s.isBackingUp {
+		b.WriteString("\n\n  Press esc to go back • ↑↓ to navigate • Space to toggle")
+	}
 
 	return b.String()
+}
+
+// backupDoneMsg is sent when backup operation completes
+type backupDoneMsg struct {
+	categories []string
+	err        error
 }
 
 // executeBackup runs the backup using the Go manager
@@ -204,16 +254,16 @@ func (s *backupScreen) executeBackup() (tea.Model, tea.Cmd) {
 		return s, nil
 	}
 
-	// Execute backup using Go manager
-	err := s.backupMgr.Backup(selectedCats)
+	// Set backing up state and start spinner
+	s.isBackingUp = true
+	s.spinner = spinner.New()
+	s.spinner.Spinner = spinner.Dot
+	s.message = "Creating backup..."
+	s.messageType = "info"
 
-	if err != nil {
-		s.message = fmt.Sprintf("Backup failed: %v", err)
-		s.messageType = "error"
-	} else {
-		s.message = fmt.Sprintf("Backup completed successfully for: %s", strings.Join(selectedCats, ", "))
-		s.messageType = "success"
+	// Return command to run backup in background
+	return s, func() tea.Msg {
+		err := s.backupMgr.Backup(selectedCats)
+		return backupDoneMsg{categories: selectedCats, err: err}
 	}
-
-	return s, nil
 }

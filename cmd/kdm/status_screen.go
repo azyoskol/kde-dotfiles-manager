@@ -10,6 +10,7 @@ import (
 	"github.com/user/kde-dotfiles-manager/internal/config"
 	"github.com/user/kde-dotfiles-manager/internal/kde"
 	"github.com/user/kde-dotfiles-manager/internal/sync"
+	"github.com/user/kde-dotfiles-manager/internal/backup"
 )
 
 // statusScreen shows the current status of configurations
@@ -109,9 +110,11 @@ func (s *statusScreen) View() string {
 		b.WriteString(fmt.Sprintf("  Dotfiles directory: %s", dotfilesDir))
 		b.WriteString("\n")
 
-		// Count backup files
-		count := s.countBackupFiles(dotfilesDir)
+		// Count backup files and size
+		count, totalSize := s.countBackupFiles(dotfilesDir)
 		b.WriteString(fmt.Sprintf("  Backed up files: %d", count))
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("  Total size: %s", backup.FormatSize(totalSize)))
 	} else {
 		b.WriteString(warningStyle.Render(fmt.Sprintf("  Dotfiles directory not found: %s", dotfilesDir)))
 	}
@@ -184,17 +187,19 @@ func (s *statusScreen) checkCategory(category string, paths map[string]string) {
 	})
 }
 
-// countBackupFiles counts the number of files in the dotfiles directory
-func (s *statusScreen) countBackupFiles(dir string) int {
+// countBackupFiles counts the number of files and total size in the dotfiles directory
+func (s *statusScreen) countBackupFiles(dir string) (int, uint64) {
 	count := 0
+	var totalSize uint64
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 		if !info.IsDir() && !strings.Contains(path, "/.git/") {
 			count++
+			totalSize += uint64(info.Size())
 		}
 		return nil
 	})
-	return count
+	return count, totalSize
 }

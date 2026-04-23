@@ -20,6 +20,7 @@ type restoreScreen struct {
 	kdePaths    *kde.Paths
 	backupMgr   *backup.Manager
 	profiles    []string
+	profileSizes map[string]string
 	cursor      int
 	selected    int
 	message     string
@@ -47,12 +48,22 @@ func newRestoreScreen(parent *model) *restoreScreen {
 		kdePaths:  paths,
 		backupMgr: backupMgr,
 		selected:  0,
+		profileSizes: make(map[string]string),
 	}
 
 	// Discover available backup profiles
 	s.profiles = s.discoverProfiles()
 	if len(s.profiles) == 0 {
 		s.profiles = []string{"No backups found"}
+	} else {
+		// Calculate sizes for each profile
+		for _, profile := range s.profiles {
+			if size, err := s.backupMgr.GetBackupSize(profile); err == nil {
+				s.profileSizes[profile] = backup.FormatSize(size)
+			} else {
+				s.profileSizes[profile] = "Unknown"
+			}
+		}
 	}
 
 	return s
@@ -131,7 +142,12 @@ func (s *restoreScreen) View() string {
 			cursor = "> "
 		}
 
-		line := fmt.Sprintf("%s%s", cursor, profile)
+		sizeStr := ""
+		if size, ok := s.profileSizes[profile]; ok {
+			sizeStr = fmt.Sprintf(" (%s)", size)
+		}
+
+		line := fmt.Sprintf("%s%s%s", cursor, profile, sizeStr)
 		if i == s.cursor {
 			b.WriteString(selectedStyle.Render(line))
 		} else {
