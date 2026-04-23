@@ -39,9 +39,68 @@ func (m *Manager) Backup(categories []string) error {
 		return fmt.Errorf("failed to create dotfiles directory: %w", err)
 	}
 
+	// Collect all unique source paths across all categories to avoid duplicates
+	uniqueSrcPaths := make(map[string]string) // srcPath -> destPath
+	categoryDestDirs := make(map[string]string) // category -> destDir
+
+	for _, category := range categories {
+		var srcPaths map[string]string
+		var destDir string
+
+		switch category {
+		case "shortcuts":
+			srcPaths = m.kdePaths.ShortcutPaths()
+			destDir = filepath.Join(dotfilesDir, "shortcuts")
+		case "themes":
+			srcPaths = m.kdePaths.ThemePaths()
+			destDir = filepath.Join(dotfilesDir, "themes")
+		case "window_management":
+			srcPaths = m.kdePaths.KWinPaths()
+			destDir = filepath.Join(dotfilesDir, "window_management")
+		case "languages":
+			srcPaths = m.kdePaths.LocalePaths()
+			destDir = filepath.Join(dotfilesDir, "languages")
+		case "widgets":
+			srcPaths = m.kdePaths.WidgetPaths()
+			destDir = filepath.Join(dotfilesDir, "widgets")
+		case "panels":
+			srcPaths = m.kdePaths.PanelPaths()
+			destDir = filepath.Join(dotfilesDir, "panels")
+		case "system_settings":
+			srcPaths = m.kdePaths.SystemSettingsPaths()
+			destDir = filepath.Join(dotfilesDir, "system_settings")
+		default:
+			continue
+		}
+
+		categoryDestDirs[category] = destDir
+
+		// Add all source paths for this category
+		for _, srcPath := range srcPaths {
+			// Determine destination path within category
+			info, err := os.Stat(srcPath)
+			if err != nil && !os.IsNotExist(err) {
+				continue
+			}
+			
+			var relPath string
+			if err == nil && info.IsDir() {
+				relPath = filepath.Base(srcPath)
+			} else {
+				relPath = m.getRelativePath(srcPath)
+			}
+			
+			destPath := filepath.Join(destDir, relPath)
+			
+			// Store the mapping - if file is in multiple categories, 
+			// it will be copied to each category's directory
+			uniqueSrcPaths[srcPath] = destPath
+		}
+	}
+
 	// Use WaitGroup to wait for all goroutines to complete
 	var wg sync.WaitGroup
-	errorChan := make(chan error, len(categories))
+	errorChan := make(chan error, len(uniqueSrcPaths))
 
 	// Start a separate goroutine to wait for all workers and close the channel
 	go func() {
@@ -49,44 +108,37 @@ func (m *Manager) Backup(categories []string) error {
 		close(errorChan)
 	}()
 
-	for _, category := range categories {
+	// Create goroutines for each unique source file
+	for srcPath, destPath := range uniqueSrcPaths {
 		wg.Add(1)
-		go func(cat string) {
+		go func(src, dst string) {
 			defer wg.Done()
 			
-			var srcPaths map[string]string
-			var destDir string
-
-			switch cat {
-			case "shortcuts":
-				srcPaths = m.kdePaths.ShortcutPaths()
-				destDir = filepath.Join(dotfilesDir, "shortcuts")
-			case "themes":
-				srcPaths = m.kdePaths.ThemePaths()
-				destDir = filepath.Join(dotfilesDir, "themes")
-			case "window_management":
-				srcPaths = m.kdePaths.KWinPaths()
-				destDir = filepath.Join(dotfilesDir, "window_management")
-			case "languages":
-				srcPaths = m.kdePaths.LocalePaths()
-				destDir = filepath.Join(dotfilesDir, "languages")
-			case "widgets":
-				srcPaths = m.kdePaths.WidgetPaths()
-				destDir = filepath.Join(dotfilesDir, "widgets")
-			case "panels":
-				srcPaths = m.kdePaths.PanelPaths()
-				destDir = filepath.Join(dotfilesDir, "panels")
-			case "system_settings":
-				srcPaths = m.kdePaths.SystemSettingsPaths()
-				destDir = filepath.Join(dotfilesDir, "system_settings")
-			default:
+			info, err := os.Stat(src)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return
+				}
+				errorChan <- fmt.Errorf("failed to stat %s: %w", src, err)
 				return
 			}
 
-			if err := m.backupCategory(cat, srcPaths, destDir); err != nil {
-				errorChan <- fmt.Errorf("failed to backup %s: %w", cat, err)
+			// Create parent directories
+			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+				errorChan <- fmt.Errorf("failed to create directory for %s: %w", dst, err)
+				return
 			}
-		}(category)
+
+			if info.IsDir() {
+				if err := fileutil.CopyDir(src, dst); err != nil {
+					errorChan <- fmt.Errorf("failed to copy directory %s: %w", src, err)
+				}
+			} else {
+				if err := fileutil.CopyFile(src, dst); err != nil {
+					errorChan <- fmt.Errorf("failed to copy file %s: %w", src, err)
+				}
+			}
+		}(srcPath, destPath)
 	}
 
 	// Collect any errors
