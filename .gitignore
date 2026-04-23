@@ -10,6 +10,9 @@ __pycache__/
 *.so
 *.a
 *.out
+# Documentation files are source content - no need to ignore them
+# The added files (docs/*.md) and modified file (README.md) are documentation/source files
+# No build artifacts, dependencies, or temporary files detected in changes
 
 # Dependencies
 node_modules/
@@ -42,4 +45,21 @@ htmlcov/
 # System files
 .DS_Store
 Thumbs.db
+```
+# Editors
+.vscode/
+.idea/
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+*.cover
+coverage.xml
+
+# Backup and temporary directories
+backup_*/
+temp_*/
+*.bak
+*.tmp
 ```
