@@ -150,3 +150,108 @@ func ListProfiles() ([]string, error) {
 	
 	return profiles, nil
 }
+
+// CreateProfile creates a new profile directory
+func CreateProfile(name string) error {
+	if name == "" {
+		return fmt.Errorf("profile name cannot be empty")
+	}
+	
+	if name == "default" {
+		return fmt.Errorf("cannot create profile with reserved name 'default'")
+	}
+	
+	cfg := DefaultConfig()
+	baseDir := cfg.ExpandPath()
+	profileDir := filepath.Join(baseDir, "profiles", name)
+	
+	// Check if profile already exists
+	if _, err := os.Stat(profileDir); err == nil {
+		return fmt.Errorf("profile '%s' already exists", name)
+	}
+	
+	if err := os.MkdirAll(profileDir, 0755); err != nil {
+		return fmt.Errorf("failed to create profile directory: %w", err)
+	}
+	
+	return nil
+}
+
+// DeleteProfile removes a profile and its data
+func DeleteProfile(name string) error {
+	if name == "" {
+		return fmt.Errorf("profile name cannot be empty")
+	}
+	
+	if name == "default" {
+		return fmt.Errorf("cannot delete default profile")
+	}
+	
+	cfg := DefaultConfig()
+	baseDir := cfg.ExpandPath()
+	profileDir := filepath.Join(baseDir, "profiles", name)
+	
+	// Check if profile exists
+	if _, err := os.Stat(profileDir); os.IsNotExist(err) {
+		return fmt.Errorf("profile '%s' does not exist", name)
+	}
+	
+	if err := os.RemoveAll(profileDir); err != nil {
+		return fmt.Errorf("failed to delete profile directory: %w", err)
+	}
+	
+	return nil
+}
+
+// RenameProfile renames an existing profile
+func RenameProfile(oldName, newName string) error {
+	if oldName == "" || newName == "" {
+		return fmt.Errorf("profile names cannot be empty")
+	}
+	
+	if newName == "default" {
+		return fmt.Errorf("cannot rename to reserved name 'default'")
+	}
+	
+	cfg := DefaultConfig()
+	baseDir := cfg.ExpandPath()
+	oldProfileDir := filepath.Join(baseDir, "profiles", oldName)
+	newProfileDir := filepath.Join(baseDir, "profiles", newName)
+	
+	// Check if old profile exists
+	if _, err := os.Stat(oldProfileDir); os.IsNotExist(err) {
+		return fmt.Errorf("profile '%s' does not exist", oldName)
+	}
+	
+	// Check if new profile already exists
+	if _, err := os.Stat(newProfileDir); err == nil {
+		return fmt.Errorf("profile '%s' already exists", newName)
+	}
+	
+	if err := os.Rename(oldProfileDir, newProfileDir); err != nil {
+		return fmt.Errorf("failed to rename profile directory: %w", err)
+	}
+	
+	// Update config if current profile was renamed
+	currentCfg, err := Load()
+	if err == nil && currentCfg.Profile == oldName {
+		currentCfg.Profile = newName
+		currentCfg.Save()
+	}
+	
+	return nil
+}
+
+// ProfileExists checks if a profile exists
+func ProfileExists(name string) bool {
+	if name == "default" {
+		return true
+	}
+	
+	cfg := DefaultConfig()
+	baseDir := cfg.ExpandPath()
+	profileDir := filepath.Join(baseDir, "profiles", name)
+	
+	_, err := os.Stat(profileDir)
+	return err == nil
+}
