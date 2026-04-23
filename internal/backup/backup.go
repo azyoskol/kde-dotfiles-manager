@@ -178,7 +178,7 @@ func (m *Manager) getRelativePath(path string) string {
 
 // Restore restores configurations from backup
 func (m *Manager) Restore(profile string) error {
-	// Calculate the correct profile path - same logic as GetBackupSize
+	// Calculate the correct profile path
 	baseDir := m.cfg.ExpandPath()
 	profilePath := filepath.Join(baseDir, "profiles", profile)
 
