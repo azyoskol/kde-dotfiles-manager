@@ -54,6 +54,9 @@ cd kde-dotfiles-manager
 # Build the TUI application
 make build
 
+# Install bash scripts
+make install-scripts
+
 # Launch the application
 ./bin/kdm
 ```
@@ -79,8 +82,11 @@ make build
 # Launch TUI application
 ./bin/kdm
 
-# The application provides a complete TUI for all operations
-# No external scripts required - everything is built into the Go binary
+# Use bash scripts directly
+./scripts/backup.sh      # Backup all KDE configurations
+./scripts/restore.sh     # Restore from backup (with widget auto-install)
+./scripts/sync.sh        # Sync with remote repository
+./scripts/deploy.sh      # Deploy configuration to current system
 ```
 
 ## 📁 Project Structure
@@ -95,8 +101,13 @@ kde-dotfiles-manager/
 │   ├── theme/               # Theme configuration handling
 │   ├── widgets/             # Widget management & auto-install
 │   ├── shortcuts/           # Keyboard shortcut handling
-│   ├── locales/             # Language/locale configuration
-│   └── backup/              # Backup and restore operations (pure Go)
+│   └── locales/             # Language/locale configuration
+├── scripts/
+│   ├── backup.sh            # Full backup script
+│   ├── restore.sh           # Full restore script with widget support
+│   ├── sync.sh              # Git sync script
+│   ├── deploy.sh            # Deploy script
+│   └── common.sh            # Shared functions
 ├── docs/                    # Documentation
 ├── assets/                  # Static assets
 ├── Makefile                 # Build automation
