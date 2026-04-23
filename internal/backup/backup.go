@@ -43,6 +43,12 @@ func (m *Manager) Backup(categories []string) error {
 	var wg sync.WaitGroup
 	errorChan := make(chan error, len(categories))
 
+	// Start a separate goroutine to wait for all workers and close the channel
+	go func() {
+		wg.Wait()
+		close(errorChan)
+	}()
+
 	for _, category := range categories {
 		wg.Add(1)
 		go func(cat string) {
@@ -82,10 +88,6 @@ func (m *Manager) Backup(categories []string) error {
 			}
 		}(category)
 	}
-
-	// Wait for all goroutines to complete
-	wg.Wait()
-	close(errorChan)
 
 	// Collect any errors
 	var errors []error
@@ -176,15 +178,9 @@ func (m *Manager) getRelativePath(path string) string {
 
 // Restore restores configurations from backup
 func (m *Manager) Restore(profile string) error {
-	// Calculate the correct profile path
+	// Calculate the correct profile path - same logic as GetBackupSize
 	baseDir := m.cfg.ExpandPath()
-	var profilePath string
-	
-	if profile == "default" {
-		profilePath = filepath.Join(baseDir, "profiles", "default")
-	} else {
-		profilePath = filepath.Join(baseDir, "profiles", profile)
-	}
+	profilePath := filepath.Join(baseDir, "profiles", profile)
 
 	// Check if profile directory exists
 	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
