@@ -285,7 +285,15 @@ func (m *Manager) Restore(profile string) error {
 
 // restoreCategory restores files for a single category
 func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]string) error {
+	// Track which destinations have been restored to avoid duplicate work
+	restored := make(map[string]bool)
+	
 	for name, destPath := range destPaths {
+		// Skip if already restored to this destination
+		if restored[destPath] {
+			continue
+		}
+		
 		// Determine source path in backup
 		relPath := m.getRelativePath(destPath)
 		srcFile := filepath.Join(backupDir, relPath)
@@ -324,6 +332,9 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 				return fmt.Errorf("failed to restore %s: %w", name, err)
 			}
 		}
+		
+		// Mark this destination as restored
+		restored[destPath] = true
 	}
 
 	return nil
