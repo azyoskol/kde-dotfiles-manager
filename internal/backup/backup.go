@@ -171,6 +171,17 @@ func (m *Manager) Restore(profile string) error {
 		}
 	}
 
+	// Special handling for cursor themes - they are stored in the same directory as icons
+	// but need to be restored separately to ensure proper restoration
+	cursorBackupDir := filepath.Join(profilePath, "themes", "cursor themes")
+	if _, err := os.Stat(cursorBackupDir); err == nil {
+		// Cursor themes backup exists, restore it explicitly
+		destPath := m.kdePaths.DataDir + "/icons"
+		if err := m.restoreCursorThemes(cursorBackupDir, destPath); err != nil {
+			return fmt.Errorf("failed to restore cursor themes: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -292,6 +303,73 @@ func (m *Manager) getFirstExistingPath(paths map[string]string) string {
 		return path
 	}
 	return ""
+}
+
+// restoreCursorThemes restores cursor themes from backup to the destination directory
+// This is a special case because cursor themes and icons share the same directory
+func (m *Manager) restoreCursorThemes(backupDir, destDir string) error {
+	// Walk through all files in the cursor themes backup
+	return filepath.Walk(backupDir, func(srcPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip the root backup directory itself
+		if srcPath == backupDir {
+			return nil
+		}
+
+		// Calculate relative path within backup
+		relPath, err := filepath.Rel(backupDir, srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to calculate relative path: %w", err)
+		}
+
+		// Build destination path
+		destPath := filepath.Join(destDir, relPath)
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", destPath, err)
+		}
+
+		// Remove existing destination if it exists (to handle type changes)
+		if _, err := os.Lstat(destPath); err == nil {
+			if info, err := os.Lstat(destPath); err == nil {
+				if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+					if err := os.RemoveAll(destPath); err != nil {
+						return fmt.Errorf("failed to remove existing directory %s: %w", destPath, err)
+					}
+				} else {
+					if err := os.Remove(destPath); err != nil {
+						return fmt.Errorf("failed to remove existing file %s: %w", destPath, err)
+					}
+				}
+			}
+		}
+
+		// Determine if source is a directory
+		isDir := info.IsDir()
+		if !isDir && info.Mode()&os.ModeSymlink != 0 {
+			targetInfo, err := os.Stat(srcPath)
+			if err == nil && targetInfo.IsDir() {
+				isDir = true
+			}
+		}
+
+		// Copy based on type
+		if isDir {
+			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to restore cursor theme directory %s: %w", destPath, err)
+			}
+		} else {
+			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to restore cursor theme file %s: %w", destPath, err)
+			}
+		}
+
+		return nil
+	})
 }
 
 // GetBackupSize calculates the total size of a backup profile in bytes
