@@ -61,35 +61,29 @@ When restoring configurations with widgets:
 3. **Check Installation**: Verifies which widgets are installed on current system
 4. **Filter KDE Widgets**: Skips official KDE widgets (org.kde.*) by default
 5. **Prompt User**: Shows list of missing custom widgets
-6. **Install Widgets**: Uses kpackagetool6 or kpackagetool5 to install
+6. **Install Widgets**: Uses plasmapkg2 or manual copy to install
 7. **Restore Config**: Applies widget configurations after installation
 
 ### Installation Methods
 
-#### Method 1: kpackagetool6 (Plasma 6 - Recommended)
+#### Method 1: plasmapkg2 (Plasma 6)
 
 ```bash
-kpackagetool6 --install /path/to/widget
+plasmapkg2 -i /path/to/widget.plasmoid
 ```
 
-This is the primary method for KDE Plasma 6+. It can install widgets from:
-- `.plasmoid` package files
-- Unpacked widget directories (containing `metadata.json`)
-
-#### Method 2: kpackagetool5 (Plasma 5 - Fallback)
+#### Method 2: plasmapkg (Plasma 5)
 
 ```bash
-kpackagetool5 --install /path/to/widget
+plasmapkg -i /path/to/widget.plasmoid
 ```
 
-Automatic fallback for older Plasma 5 installations.
+#### Method 3: Manual Copy
 
-#### Method 3: Direct Directory Installation
-
-kpackagetool6 can install directly from unpacked widget directories:
+For widgets without package files:
 
 ```bash
-kpackagetool6 --install ~/.local/share/plasma/plasmoids/widget-name
+cp -r widget-folder ~/.local/share/plasma/plasmoids/
 ```
 
 ### Configuration
@@ -150,13 +144,10 @@ Custom widgets are identified by their ID:
 ### Listing Installed Widgets
 
 ```bash
-# List all installed widgets (Plasma 6)
-kpackagetool6 --list
+# List all installed widgets
+plasmapkg2 -l
 
-# List all installed widgets (Plasma 5)
-kpackagetool5 --list
-
-# Or check directory directly
+# Or check directory
 ls ~/.local/share/plasma/plasmoids/
 ```
 
@@ -187,22 +178,18 @@ Example metadata.json:
 **Problem:** Installation fails during restore
 
 **Solutions:**
-1. Check kpackagetool6 availability:
+1. Check plasmapkg2 availability:
    ```bash
-   which kpackagetool6
+   which plasmapkg2
    ```
-2. Verify widget package/directory integrity (must contain `metadata.json`)
+2. Verify widget package integrity
 3. Try manual installation:
    ```bash
-   kpackagetool6 --install /path/to/widget
+   cp -r widget ~/.local/share/plasma/plasmoids/
    ```
 4. Check permissions:
    ```bash
    chmod -R 755 ~/.local/share/plasma/plasmoids/widget
-   ```
-5. Check for error messages:
-   ```bash
-   kpackagetool6 --install /path/to/widget 2>&1
    ```
 
 ### Widget Not Appearing
@@ -280,8 +267,8 @@ done > ~/kde-dotfiles/widgets/versions.txt
 Install multiple widgets:
 
 ```bash
-for widget in ~/downloads/widgets/*; do
-  kpackagetool6 --install "$widget"
+for widget in ~/downloads/widgets/*.plasmoid; do
+  plasmapkg2 -i "$widget"
 done
 ```
 
@@ -289,7 +276,7 @@ Remove widgets:
 
 ```bash
 for widget in com.github.widget1 com.github.widget2; do
-  kpackagetool6 --uninstall "$widget"
+  plasmapkg2 -r "$widget"
 done
 ```
 
@@ -337,36 +324,23 @@ done
 
 ## Command Reference
 
-### kpackagetool6 Commands (Plasma 6)
-
-```bash
-# Install widget (from .plasmoid or directory)
-kpackagetool6 --install /path/to/widget
-
-# Remove widget
-kpackagetool6 --uninstall widget-id
-
-# List installed widgets
-kpackagetool6 --list
-
-# Show widget info
-kpackagetool6 --info widget-id
-
-# Upgrade widget
-kpackagetool6 --upgrade /path/to/widget
-```
-
-### kpackagetool5 Commands (Plasma 5 - Fallback)
+### plasmapkg2 Commands
 
 ```bash
 # Install widget
-kpackagetool5 --install /path/to/widget
+plasmapkg2 -i widget.plasmoid
 
 # Remove widget
-kpackagetool5 --uninstall widget-id
+plasmapkg2 -r widget-id
 
 # List installed widgets
-kpackagetool5 --list
+plasmapkg2 -l
+
+# Show widget info
+plasmapkg2 -s widget-id
+
+# Upgrade widget
+plasmapkg2 -u widget-id
 ```
 
 ### Backup Script Options

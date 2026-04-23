@@ -64,8 +64,6 @@ The main menu provides access to all major functions:
 └─────────────────────────────────────────┘
 ```
 
-All operations are performed through the TUI interface - no external scripts required. The Go application handles backup, restore, sync, and deployment natively.
-
 ## Backup Configuration
 
 ### Creating a Full Backup
@@ -73,20 +71,35 @@ All operations are performed through the TUI interface - no external scripts req
 1. Launch the TUI: `./bin/kdm`
 2. Select "Backup Configuration"
 3. Choose categories to backup (or select all)
-4. Press Enter to start the backup
+4. Confirm the backup location
 5. Wait for completion
 
 ### Backup Categories
 
 | Category | Files Backed Up |
 |----------|----------------|
-| **Shortcuts** | `kglobalshortcutsrc`, `khotkeysrc` |
-| **Themes** | Color schemes, window decorations, cursors, icons, wallpapers, GTK themes |
-| **Window Management** | KWin rules, virtual desktops, tiling settings, kwinrc |
+| **Shortcuts** | `kglobalshortcutsrc`, `kwinrc`, shortcuts configurations |
+| **Themes** | Color schemes, window decorations, cursors, icons, wallpapers |
+| **Window Management** | KWin rules, virtual desktops, tiling settings |
 | **Languages** | Locale settings, keyboard layouts, input methods |
-| **Widgets** | Desktop widgets, panel applets, configurations with auto-install support |
+| **Widgets** | Desktop widgets, panel applets, configurations |
 | **Panels** | Panel layouts, positions, settings |
-| **System Settings** | General system settings, power management, screen locker |
+
+### Command Line Backup
+
+```bash
+# Backup all categories
+./scripts/backup.sh
+
+# Backup specific categories
+./scripts/backup.sh --category shortcuts,themes
+
+# Backup with custom output directory
+./scripts/backup.sh --output ~/my-backups
+
+# Verbose backup
+./scripts/backup.sh --verbose
+```
 
 ### Backup Structure
 
@@ -96,31 +109,23 @@ Backups are organized as follows:
 ~/kde-dotfiles/
 ├── shortcuts/
 │   ├── kglobalshortcutsrc
-│   └── khotkeysrc
+│   └── kwin_shortcuts.conf
 ├── themes/
-│   ├── kdeglobals
-│   ├── plasmarc
-│   ├── color-schemes/
+│   ├── colors/
 │   ├── wallpapers/
-│   └── icons/
+│   ├── window-decorations/
+│   └── cursors/
 ├── window_management/
 │   ├── kwinrc
-│   └── kwinrulesrc
+│   └── virtual-desktops.conf
 ├── languages/
-│   ├── plasma-localerc
-│   └── language.conf
+│   └── locale.conf
 ├── widgets/
-│   ├── plasma/
-│   │   ├── plasmoids/
-│   │   │   └── [widget-id]/
-│   │   └── org.kde.plasma.desktop-appletsrc
-│   └── org.kde.panel-appletsrc
-├── panels/
-│   └── org.kde.panel
-└── system_settings/
-    ├── kdeglobals
-    ├── powerdevilrc
-    └── kscreenlockerrc
+│   ├── plasmoids/
+│   │   └── [widget-id]/
+│   └── plasma-org.kde.plasma.desktop-appletsrc
+└── panels/
+    └── org.kde.panel-appletsrc
 ```
 
 ## Restore Configuration
@@ -129,10 +134,10 @@ Backups are organized as follows:
 
 1. Launch the TUI: `./bin/kdm`
 2. Select "Restore Configuration"
-3. Choose the backup profile to restore
-4. The system will automatically restore all available categories
-5. If custom widgets are found, you'll be prompted to install them
-6. Wait for completion and restart Plasma if needed
+3. Choose the backup to restore
+4. Select categories to restore
+5. Review changes (optional)
+6. Confirm restoration
 
 ### Widget Auto-Installation
 
@@ -140,15 +145,35 @@ When restoring widget configurations:
 
 1. The system scans for custom widgets in the backup
 2. Checks if widgets are installed on the current system
-3. Prompts to install missing widgets through the TUI
-4. Installs widgets using the built-in Go installer (no external scripts)
+3. Prompts to install missing widgets
+4. Installs widgets using `plasmapkg2` or copies to local directory
 5. Continues with configuration restore
+
+### Command Line Restore
+
+```bash
+# Restore all categories
+./scripts/restore.sh
+
+# Restore specific categories
+./scripts/restore.sh --category shortcuts,themes
+
+# Interactive mode with confirmation
+./scripts/restore.sh --interactive
+
+# Restore without backup prompt
+./scripts/restore.sh --force
+
+# Dry run (show what would be restored)
+./scripts/restore.sh --dry-run
+```
 
 ### Safety Features
 
-- **Automatic Pre-Restore Backup**: Creates a backup before restoring (configurable)
-- **Profile Isolation**: Each profile has its own backup directory
-- **Category Detection**: Only restores categories that exist in the backup
+- **Automatic Pre-Restore Backup**: Creates a backup before restoring
+- **Confirmation Prompts**: Asks for confirmation before overwriting
+- **Dry Run Mode**: Preview changes without applying them
+- **Category Selection**: Restore only specific categories
 
 ## Synchronization
 
