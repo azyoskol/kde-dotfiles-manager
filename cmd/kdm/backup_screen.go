@@ -144,6 +144,12 @@ func (s *backupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.selected[s.cursor] = !s.selected[s.cursor]
 		}
 	}
+	
+	// Continue spinner animation during backup
+	if s.isBackingUp {
+		return s, s.spinner.Tick
+	}
+	
 	return s, nil
 }
 
