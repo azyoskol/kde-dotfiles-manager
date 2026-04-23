@@ -89,10 +89,21 @@ func (m *Manager) Backup(categories []string) error {
 			}
 			
 			var relPath string
-			if err == nil && info.IsDir() {
-				relPath = filepath.Base(srcPath)
+			var isDir bool
+			if err == nil {
+				// Check if it's a directory or a symlink to a directory
+				if info.IsDir() {
+					isDir = true
+				} else if info.Mode()&os.ModeSymlink != 0 {
+					// For symlinks, check if target is a directory
+					targetInfo, err := os.Stat(srcPath)
+					if err == nil && targetInfo.IsDir() {
+						isDir = true
+					}
+				}
+				relPath = m.getRelativePathForBackup(srcPath, isDir)
 			} else {
-				relPath = m.getRelativePath(srcPath)
+				relPath = filepath.Base(srcPath)
 			}
 			
 			destPath := filepath.Join(destDir, relPath)
@@ -140,7 +151,17 @@ func (m *Manager) Backup(categories []string) error {
 			}
 			mkdirMu.Unlock()
 
-			if info.IsDir() {
+			// Check if it's a directory or a symlink to a directory
+			isDir := info.IsDir()
+			if !isDir && info.Mode()&os.ModeSymlink != 0 {
+				// For symlinks, check if target is a directory
+				targetInfo, err := os.Stat(src)
+				if err == nil && targetInfo.IsDir() {
+					isDir = true
+				}
+			}
+
+			if isDir {
 				if err := fileutil.CopyDir(src, dst); err != nil {
 					errorChan <- fmt.Errorf("failed to copy directory %s: %w", src, err)
 				}
@@ -229,6 +250,15 @@ func (m *Manager) backupCategory(name string, srcPaths map[string]string, destDi
 	}
 
 	return nil
+}
+
+// getRelativePathForBackup returns the path relative to config or data directory for backup.
+// If isDir is true, it returns just the base name of the directory.
+func (m *Manager) getRelativePathForBackup(path string, isDir bool) string {
+	if isDir {
+		return filepath.Base(path)
+	}
+	return m.getRelativePath(path)
 }
 
 // getRelativePath returns the path relative to config or data directory
