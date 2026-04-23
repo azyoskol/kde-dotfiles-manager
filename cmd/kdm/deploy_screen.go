@@ -25,8 +25,8 @@ func newDeployScreen(parent *model) *deployScreen {
 		parent:   parent,
 		cfg:      parent.cfg,
 		cursor:   0,
-		profiles: s.discoverProfiles(),
 	}
+	s.profiles = s.discoverProfiles()
 
 	if len(s.profiles) == 0 {
 		s.profiles = []string{"No profiles found"}

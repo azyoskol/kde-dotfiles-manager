@@ -41,10 +41,10 @@ func main() {
 
 // model is the main TUI model
 type model struct {
-	list   list.Model
-	cfg    *config.Config
-	width  int
-	height int
+	list     list.Model
+	cfg      *config.Config
+	width    int
+	height   int
 	quitting bool
 }
 
@@ -86,22 +86,21 @@ func (m model) View() string {
 	return "\n" + m.list.View() + "\n\n  Press q to quit • Enter to select • ↑↓ to navigate\n"
 }
 
-// handleSelection routes the user's choice to the appropriate screen
 func (m model) handleSelection() (tea.Model, tea.Cmd) {
 	if item, ok := m.list.SelectedItem().(mainItem); ok {
 		switch item.id {
 		case "backup":
-			return newBackupScreen(m), nil
+			return newBackupScreen(&m), nil
 		case "restore":
-			return newRestoreScreen(m), nil
+			return newRestoreScreen(&m), nil
 		case "sync":
-			return newSyncScreen(m), nil
+			return newSyncScreen(&m), nil
 		case "deploy":
-			return newDeployScreen(m), nil
+			return newDeployScreen(&m), nil
 		case "config":
-			return newConfigScreen(m), nil
+			return newConfigScreen(&m), nil
 		case "status":
-			return newStatusScreen(m), nil
+			return newStatusScreen(&m), nil
 		case "quit":
 			m.quitting = true
 			return m, tea.Quit
