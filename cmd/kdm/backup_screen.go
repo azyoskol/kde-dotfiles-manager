@@ -54,17 +54,6 @@ func newBackupScreen(parent *model) *backupScreen {
 		{name: "panels", description: "Panel layout and configuration", enabled: true},
 		{name: "system_settings", description: "General system settings", enabled: true},
 		{name: "Execute Backup", description: "Start backup process for selected categories", enabled: true},
-	})
-
-	// Initialize categories
-	s.categories = append(s.categories, []categoryItem{
-		{name: "shortcuts", description: "Keyboard shortcuts and global hotkeys", enabled: true},
-		{name: "themes", description: "Color schemes, icons, cursors, wallpapers", enabled: true},
-		{name: "window_management", description: "KWin rules, virtual desktops, tiling", enabled: true},
-		{name: "languages", description: "Locale, input methods, keyboard layouts", enabled: true},
-		{name: "widgets", description: "Desktop widgets and plasmoids", enabled: true},
-		{name: "panels", description: "Panel layout and configuration", enabled: true},
-		{name: "system_settings", description: "General system settings", enabled: true},
 	}
 
 	// Mark categories from config as selected

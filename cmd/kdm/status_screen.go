@@ -37,6 +37,7 @@ func newStatusScreen(parent *model) *statusScreen {
 		statuses: []statusItem{},
 	}
 
+	var err error
 	s.kdePaths, err = kde.NewPaths()
 	if err != nil {
 		s.kdePaths = &kde.Paths{}
