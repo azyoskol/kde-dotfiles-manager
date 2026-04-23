@@ -299,8 +299,20 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 			return fmt.Errorf("failed to create directory for %s: %w", name, err)
 		}
 
-		if err := fileutil.CopyFile(srcFile, destPath); err != nil {
-			return fmt.Errorf("failed to restore %s: %w", name, err)
+		// Check if source is a directory
+		srcInfo, err := os.Stat(srcFile)
+		if err != nil {
+			return fmt.Errorf("failed to stat %s: %w", srcFile, err)
+		}
+
+		if srcInfo.IsDir() {
+			if err := fileutil.CopyDir(srcFile, destPath); err != nil {
+				return fmt.Errorf("failed to restore %s: %w", name, err)
+			}
+		} else {
+			if err := fileutil.CopyFile(srcFile, destPath); err != nil {
+				return fmt.Errorf("failed to restore %s: %w", name, err)
+			}
 		}
 	}
 
