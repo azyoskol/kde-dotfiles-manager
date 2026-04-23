@@ -294,26 +294,34 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 			continue
 		}
 		
-		// Determine source path in backup
+		// Try to find the source file in backup using multiple strategies
+		var srcFile string
+		var srcInfo os.FileInfo
+		var found bool
+		
+		// Strategy 1: Try relative path (for files with directory structure)
 		relPath := m.getRelativePath(destPath)
-		srcFile := filepath.Join(backupDir, relPath)
-
-		// Check if source exists (could be file or directory)
-		srcInfo, err := os.Stat(srcFile)
-		if err != nil {
-			if os.IsNotExist(err) {
-				// Try alternative: maybe it was backed up as just the base name
-				// This happens when a directory is backed up with just its base name
-				altSrcFile := filepath.Join(backupDir, filepath.Base(destPath))
-				if altInfo, altErr := os.Stat(altSrcFile); altErr == nil {
-					srcFile = altSrcFile
-					srcInfo = altInfo
-				} else {
-					continue
-				}
-			} else {
-				return fmt.Errorf("failed to stat %s: %w", srcFile, err)
+		candidate := filepath.Join(backupDir, relPath)
+		if info, err := os.Stat(candidate); err == nil {
+			srcFile = candidate
+			srcInfo = info
+			found = true
+		}
+		
+		// Strategy 2: Try just the base name (for directories backed up at root level)
+		if !found {
+			baseName := filepath.Base(destPath)
+			candidate = filepath.Join(backupDir, baseName)
+			if info, err := os.Stat(candidate); err == nil {
+				srcFile = candidate
+				srcInfo = info
+				found = true
 			}
+		}
+		
+		// Skip if not found in backup
+		if !found {
+			continue
 		}
 
 		// Create parent directories for destination
