@@ -46,6 +46,8 @@ func (m *Manager) Backup(categories []string) error {
 	}
 
 	// Collect all work items - a file may need to be copied to multiple categories
+	// Use a map to track unique src->dst pairs to avoid duplicate work
+	seen := make(map[string]bool) // Track unique src+dst combinations
 	var workItems []workItem
 
 	for _, category := range categories {
@@ -95,7 +97,14 @@ func (m *Manager) Backup(categories []string) error {
 			
 			destPath := filepath.Join(destDir, relPath)
 			
-			// Add work item - same source file may be copied to multiple destinations
+			// Create unique key for this src->dst pair
+			key := srcPath + "->" + destPath
+			if seen[key] {
+				continue // Skip if we already have this exact copy task
+			}
+			seen[key] = true
+			
+			// Add work item
 			workItems = append(workItems, workItem{src: srcPath, dst: destPath})
 		}
 	}
