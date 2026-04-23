@@ -78,7 +78,7 @@ func (m *Manager) Backup(categories []string) error {
 		// Add all source paths for this category
 		for _, srcPath := range srcPaths {
 			// Determine destination path within category
-			info, err := os.Stat(srcPath)
+			info, err := os.Lstat(srcPath)
 			if err != nil && !os.IsNotExist(err) {
 				continue
 			}
@@ -98,10 +98,6 @@ func (m *Manager) Backup(categories []string) error {
 		}
 	}
 
-	// Use WaitGroup to wait for all goroutines to complete
-	var wg sync.WaitGroup
-	errorChan := make(chan error, len(uniqueSrcPaths)*2) // Buffer for potential duplicate errors
-
 	// Create a slice of work items to avoid closure issues
 	type workItem struct {
 		src  string
@@ -113,26 +109,36 @@ func (m *Manager) Backup(categories []string) error {
 		workItems = append(workItems, workItem{src: srcPath, dst: destPath})
 	}
 
+	// Use WaitGroup to wait for all goroutines to complete
+	var wg sync.WaitGroup
+	errorChan := make(chan error, len(workItems)+len(categories)) // Sufficient buffer
+
+	// Create a mutex for synchronizing directory creation
+	var mkdirMu sync.Mutex
+
 	// Create goroutines for each unique source file
 	for _, item := range workItems {
 		wg.Add(1)
 		go func(src, dst string) {
 			defer wg.Done()
 			
-			info, err := os.Stat(src)
+			info, err := os.Lstat(src)
 			if err != nil {
 				if os.IsNotExist(err) {
-					return
+					return // File doesn't exist, skip silently
 				}
 				errorChan <- fmt.Errorf("failed to stat %s: %w", src, err)
 				return
 			}
 
-			// Create parent directories synchronously before copying
+			// Create parent directories with mutex to avoid race conditions
+			mkdirMu.Lock()
 			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+				mkdirMu.Unlock()
 				errorChan <- fmt.Errorf("failed to create directory for %s: %w", dst, err)
 				return
 			}
+			mkdirMu.Unlock()
 
 			if info.IsDir() {
 				if err := fileutil.CopyDir(src, dst); err != nil {
