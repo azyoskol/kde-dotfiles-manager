@@ -269,6 +269,7 @@ func (s *backupScreen) executeBackup() (tea.Model, tea.Cmd) {
 
 	// Return command to run backup in background
 	return s, func() tea.Msg {
+		// Run backup in a separate goroutine to avoid blocking the UI
 		err := s.backupMgr.Backup(selectedCats)
 		return backupDoneMsg{categories: selectedCats, err: err}
 	}

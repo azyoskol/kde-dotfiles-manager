@@ -10,6 +10,7 @@ vendor/
 # Logs and temp files
 *.log
 *.tmp
+*.swp
 
 # Environment
 .env
@@ -25,37 +26,8 @@ coverage/
 htmlcov/
 .coverage
 
-# Distribution
+# Build directories (if present)
 dist/
 build/
 target/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-
-# Node
-node_modules/
-
-# Virtual environments
-venv/
-.venv/
-env/
-.ENV
-
-# Gradle
-.gradle/
-build/
-
-# Go specific
-*.exe
-*.dll
-*.so
-*.dylib
-*.test
-*.prof
 ```
