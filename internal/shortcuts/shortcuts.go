@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/user/kde-dotfiles-manager/internal/fileutil"
 )
 
 // ShortcutEntry represents a single keyboard shortcut
@@ -160,40 +162,28 @@ func ParseKHotkeys(path string) ([]ShortcutEntry, error) {
 
 // Backup copies shortcut configuration files
 func Backup(srcPath, destPath string) error {
-	data, err := os.ReadFile(srcPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, skip
-		}
-		return fmt.Errorf("failed to read %s: %w", srcPath, err)
+	if !fileutil.FileExists(srcPath) {
+		return nil // File doesn't exist, skip
 	}
 
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write %s: %w", destPath, err)
+	if err := fileutil.EnsureDir(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	return nil
+	return fileutil.CopyFile(srcPath, destPath)
 }
 
 // Restore copies shortcut configuration files back
 func Restore(srcPath, destPath string) error {
-	data, err := os.ReadFile(srcPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // Backup doesn't exist, skip
-		}
-		return fmt.Errorf("failed to read backup %s: %w", srcPath, err)
+	if !fileutil.FileExists(srcPath) {
+		return nil // Backup doesn't exist, skip
 	}
 
 	// Create parent directory if needed
 	parent := filepath.Dir(destPath)
-	if err := os.MkdirAll(parent, 0755); err != nil {
+	if err := fileutil.EnsureDir(parent, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to restore %s: %w", destPath, err)
-	}
-
-	return nil
+	return fileutil.CopyFile(srcPath, destPath)
 }
