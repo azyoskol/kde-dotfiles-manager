@@ -204,13 +204,40 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 	return nil
 }
 
-// copyFile copies a single file
+// copyFile copies a single file or symbolic link
 func copyFile(src, dst string) error {
+	// Use Lstat to not follow symlinks
+	info, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+
+	// Handle symbolic links
+	if info.Mode()&os.ModeSymlink != 0 {
+		linkTarget, err := os.Readlink(src)
+		if err != nil {
+			return fmt.Errorf("failed to read symlink %s: %w", src, err)
+		}
+		// Create parent directory if needed
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for symlink %s: %w", dst, err)
+		}
+		if err := os.Symlink(linkTarget, dst); err != nil {
+			return fmt.Errorf("failed to create symlink %s: %w", dst, err)
+		}
+		return nil
+	}
+
+	// Regular file
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0644)
+	// Create parent directory if needed
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("failed to create directory for file %s: %w", dst, err)
+	}
+	return os.WriteFile(dst, data, info.Mode())
 }
 
 // copyDir recursively copies a directory
