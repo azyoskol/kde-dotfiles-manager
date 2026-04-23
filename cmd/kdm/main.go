@@ -95,8 +95,6 @@ func (m model) handleSelection() (tea.Model, tea.Cmd) {
 			return newRestoreScreen(&m), nil
 		case "sync":
 			return newSyncScreen(&m), nil
-		case "deploy":
-			return newDeployScreen(&m), nil
 		case "config":
 			return newConfigScreen(&m), nil
 		case "status":
@@ -139,11 +137,6 @@ func mainMenuItems() []list.Item {
 			id:          "sync",
 			title:       "🔄 Sync",
 			description: "Synchronize dotfiles with Git repository",
-		},
-		mainItem{
-			id:          "deploy",
-			title:       "🚀 Deploy",
-			description: "Deploy saved configurations to current system",
 		},
 		mainItem{
 			id:          "profile",
