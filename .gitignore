@@ -11,11 +11,6 @@ vendor/
 *.log
 *.tmp
 
-# Environment
-.env
-.env.local
-*.env.*
-
 # Editors
 .vscode/
 .idea/
@@ -25,34 +20,62 @@ coverage/
 htmlcov/
 .coverage
 
-# Distribution
-dist/
-build/
-target/
+# Environment
+.env
+.env.local
+*.env.*
 
-# Python specific
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.Python
+*.so
+*.egg-info/
+.eggs/
 
-# Go specific
+# Go
 *.exe
 *.dll
 *.so
-*.a
+*.dylib
+*.test
+*.prof
 
-# Gradle
-.gradle/
-
-# MyPy
-.mypy_cache/
-
-# Pytest
-.pytest_cache/
+# Build directories
+bin/
+pkg/
+target/
 
 # Temporary files
-*.swp
-*.swo
+*.tmp
+*.temp
 *~
+.DS_Store
+Thumbs.db
+
+# Compression
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
