@@ -290,21 +290,22 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 		relPath := m.getRelativePath(destPath)
 		srcFile := filepath.Join(backupDir, relPath)
 
-		if _, err := os.Stat(srcFile); os.IsNotExist(err) {
-			continue
+		// Check if source exists (could be file or directory)
+		srcInfo, err := os.Stat(srcFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("failed to stat %s: %w", srcFile, err)
 		}
 
+		// Create parent directories for destination
 		parent := filepath.Dir(destPath)
 		if err := fileutil.EnsureDir(parent, 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", name, err)
 		}
 
-		// Check if source is a directory
-		srcInfo, err := os.Stat(srcFile)
-		if err != nil {
-			return fmt.Errorf("failed to stat %s: %w", srcFile, err)
-		}
-
+		// Copy based on type
 		if srcInfo.IsDir() {
 			if err := fileutil.CopyDir(srcFile, destPath); err != nil {
 				return fmt.Errorf("failed to restore %s: %w", name, err)
