@@ -51,14 +51,25 @@ func copyRegularFile(src, dst string, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer dstFile.Close()
-
+	
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		dstFile.Close()
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
 
+	// Ensure all data is written to disk
+	if err := dstFile.Sync(); err != nil {
+		dstFile.Close()
+		return fmt.Errorf("failed to sync file: %w", err)
+	}
+
 	if err := dstFile.Chmod(mode); err != nil {
+		dstFile.Close()
 		return fmt.Errorf("failed to set file permissions: %w", err)
+	}
+
+	if err := dstFile.Close(); err != nil {
+		return fmt.Errorf("failed to close destination file: %w", err)
 	}
 
 	return nil
