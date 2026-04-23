@@ -102,12 +102,6 @@ func (m *Manager) Backup(categories []string) error {
 	var wg sync.WaitGroup
 	errorChan := make(chan error, len(uniqueSrcPaths))
 
-	// Start a separate goroutine to wait for all workers and close the channel
-	go func() {
-		wg.Wait()
-		close(errorChan)
-	}()
-
 	// Create goroutines for each unique source file
 	for srcPath, destPath := range uniqueSrcPaths {
 		wg.Add(1)
@@ -123,7 +117,7 @@ func (m *Manager) Backup(categories []string) error {
 				return
 			}
 
-			// Create parent directories
+			// Create parent directories synchronously before copying
 			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 				errorChan <- fmt.Errorf("failed to create directory for %s: %w", dst, err)
 				return
@@ -141,7 +135,13 @@ func (m *Manager) Backup(categories []string) error {
 		}(srcPath, destPath)
 	}
 
-	// Collect any errors
+	// Start a separate goroutine to close the channel after all workers complete
+	go func() {
+		wg.Wait()
+		close(errorChan)
+	}()
+
+	// Collect any errors - this blocks until all goroutines complete and channel is closed
 	var errors []error
 	for err := range errorChan {
 		errors = append(errors, err)
