@@ -3,21 +3,25 @@
 # No build artifacts, dependencies, or temporary files detected in changes
 
 # Dependencies
+vendor/
 node_modules/
 venv/
 .venv/
 .env
 .env.local
-*.env.*
+.env.*
+!.env.example
 
 # Editors
 .vscode/
 .idea/
 
-# Coverage
+# Coverage reports
 coverage/
 htmlcov/
 .coverage
+*.cover
+coverage.xml
 
 # Backup and temporary directories
 backup_*/
