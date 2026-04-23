@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/user/kde-dotfiles-manager/internal/config"
 	"github.com/user/kde-dotfiles-manager/internal/kde"
 	"github.com/user/kde-dotfiles-manager/internal/widgets"
+	"github.com/user/kde-dotfiles-manager/internal/backup"
 )
 
 // restoreScreen handles the restore functionality
@@ -18,6 +18,7 @@ type restoreScreen struct {
 	parent      *model
 	cfg         *config.Config
 	kdePaths    *kde.Paths
+	backupMgr   *backup.Manager
 	profiles    []string
 	cursor      int
 	selected    int
@@ -34,11 +35,18 @@ func newRestoreScreen(parent *model) *restoreScreen {
 	if err != nil {
 		paths = &kde.Paths{}
 	}
+	
+	backupMgr, err := backup.NewManager(parent.cfg)
+	if err != nil {
+		backupMgr = nil
+	}
+	
 	s := &restoreScreen{
-		parent:   parent,
-		cfg:      parent.cfg,
-		kdePaths: paths,
-		selected: 0,
+		parent:    parent,
+		cfg:       parent.cfg,
+		kdePaths:  paths,
+		backupMgr: backupMgr,
+		selected:  0,
 	}
 
 	// Discover available backup profiles
@@ -192,28 +200,63 @@ func (s *restoreScreen) viewWidgetInstall(b *strings.Builder) string {
 
 // discoverProfiles finds available backup profiles in the dotfiles directory
 func (s *restoreScreen) discoverProfiles() []string {
-	dotfilesDir := s.cfg.ExpandPath()
+	dotfilesDir := s.cfg.GetProfileDotfilesDir()
 	var profiles []string
 
-	entries, err := os.ReadDir(dotfilesDir)
-	if err != nil {
+	// For default profile, check both root and profiles subdirectory
+	if s.cfg.Profile == "" || s.cfg.Profile == "default" {
+		baseDir := s.cfg.ExpandPath()
+		profilesDir := filepath.Join(baseDir, "profiles")
+		
+		// Check profiles subdirectory
+		if entries, err := os.ReadDir(profilesDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() && entry.Name() != ".git" {
+					profiles = append(profiles, entry.Name())
+				}
+			}
+		}
+		
+		// Also check for legacy backups in root directory
+		if entries, err := os.ReadDir(baseDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() && entry.Name() != ".git" && entry.Name() != "profiles" {
+					// Check if this looks like a backup (has config files)
+					configPath := filepath.Join(baseDir, entry.Name(), "config")
+					if _, err := os.Stat(configPath); err == nil {
+						profiles = append(profiles, entry.Name())
+					}
+				}
+			}
+		}
+		
+		if len(profiles) == 0 {
+			return []string{"No backups found"}
+		}
 		return profiles
 	}
-
-	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() != ".git" {
-			profiles = append(profiles, entry.Name())
-		}
+	
+	// For named profiles, just return the current profile if it exists
+	if _, err := os.Stat(dotfilesDir); err == nil {
+		return []string{s.cfg.Profile}
 	}
-
-	return profiles
+	
+	return []string{"No backups found"}
 }
 
-// executeRestore runs the restore bash script
+// executeRestore restores configurations using the Go manager
 func (s *restoreScreen) executeRestore() (tea.Model, tea.Cmd) {
 	profile := s.profiles[s.cursor]
-	dotfilesDir := s.cfg.ExpandPath()
-	profilePath := filepath.Join(dotfilesDir, profile)
+	dotfilesDir := s.cfg.GetProfileDotfilesDir()
+	
+	// For default profile, construct the full path
+	var profilePath string
+	if s.cfg.Profile == "" || s.cfg.Profile == "default" {
+		baseDir := s.cfg.ExpandPath()
+		profilePath = filepath.Join(baseDir, profile)
+	} else {
+		profilePath = dotfilesDir
+	}
 
 	// Check if profile directory exists
 	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
@@ -228,18 +271,17 @@ func (s *restoreScreen) executeRestore() (tea.Model, tea.Cmd) {
 		s.messageType = "info"
 	}
 
-	// Run restore script
-	scriptPath := "scripts/restore.sh"
-	args := []string{
-		"--dotfiles-dir", dotfilesDir,
-		"--profile", profile,
+	if s.backupMgr == nil {
+		s.message = "Backup manager not initialized"
+		s.messageType = "error"
+		return s, nil
 	}
 
-	cmd := exec.Command("bash", append([]string{scriptPath}, args...)...)
-	output, err := cmd.CombinedOutput()
+	// Run restore using Go manager
+	err := s.backupMgr.Restore(profile)
 
 	if err != nil {
-		s.message = fmt.Sprintf("Restore failed: %s", string(output))
+		s.message = fmt.Sprintf("Restore failed: %v", err)
 		s.messageType = "error"
 		return s, nil
 	}
@@ -312,8 +354,15 @@ func (s *restoreScreen) findCustomWidgets(profilePath string) ([]string, error) 
 // installSelectedWidgets installs the selected custom widgets
 func (s *restoreScreen) installSelectedWidgets() (tea.Model, tea.Cmd) {
 	profile := s.profiles[s.selected]
-	dotfilesDir := s.cfg.ExpandPath()
-	profilePath := filepath.Join(dotfilesDir, profile)
+	dotfilesDir := s.cfg.GetProfileDotfilesDir()
+	
+	var profilePath string
+	if s.cfg.Profile == "" || s.cfg.Profile == "default" {
+		baseDir := s.cfg.ExpandPath()
+		profilePath = filepath.Join(baseDir, profile)
+	} else {
+		profilePath = dotfilesDir
+	}
 	
 	installed, err := widgets.InstallWidgetsFromBackup(profilePath, s.kdePaths.DataDir, false)
 	

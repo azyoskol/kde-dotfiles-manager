@@ -101,6 +101,8 @@ func (m model) handleSelection() (tea.Model, tea.Cmd) {
 			return newConfigScreen(&m), nil
 		case "status":
 			return newStatusScreen(&m), nil
+		case "profile":
+			return newProfileScreen(&m), nil
 		case "quit":
 			m.quitting = true
 			return m, tea.Quit
@@ -142,6 +144,11 @@ func mainMenuItems() []list.Item {
 			id:          "deploy",
 			title:       "🚀 Deploy",
 			description: "Deploy saved configurations to current system",
+		},
+		mainItem{
+			id:          "profile",
+			title:       "👤 Profile",
+			description: "Switch between configuration profiles",
 		},
 		mainItem{
 			id:          "config",

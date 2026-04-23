@@ -2,4 +2,30 @@
 # The added files (docs/*.md) and modified file (README.md) are documentation/source files
 # No build artifacts, dependencies, or temporary files detected in changes
 
-# Output remains empty since only source/documentation files were changed
+# Dependencies
+vendor/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Backup and temporary directories
+backup_*/
+temp_*/
+*.bak
+*.tmp
+```
