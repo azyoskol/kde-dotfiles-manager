@@ -1,17 +1,51 @@
+```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
 # Documentation files are source content - no need to ignore them
 # The added files (docs/*.md) and modified file (README.md) are documentation/source files
 # No build artifacts, dependencies, or temporary files detected in changes
 
 # Dependencies
-vendor/
 node_modules/
 venv/
 .venv/
 .env
 .env.local
 .env.*
-!.env.example
 
+# Build directories
+dist/
+build/
+target/
+coverage/
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.gradle/
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+```
 # Editors
 .vscode/
 .idea/
