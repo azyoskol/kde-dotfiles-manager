@@ -1,48 +1,5 @@
-```
-# Compiled and build artifacts
-*.o
-*.obj
-*.out
+# Documentation files are source content - no need to ignore them
+# The added files (docs/*.md) and modified file (README.md) are documentation/source files
+# No build artifacts, dependencies, or temporary files detected in changes
 
-# Dependencies
-vendor/
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
-# Editors
-.vscode/
-.idea/
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Build directories
-bin/
-dist/
-build/
-target/
-
-# Package management
-node_modules/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.gradle/
-.cargo/
-zig-cache/
-.julia/
-
-# System files
-.DS_Store
-Thumbs.db
-```
+# Output remains empty since only source/documentation files were changed
