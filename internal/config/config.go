@@ -123,27 +123,46 @@ func ListProfiles() ([]string, error) {
 	cfg := DefaultConfig()
 	baseDir := cfg.ExpandPath()
 	
-	profiles := []string{"default"}
+	profiles := []string{}
 	
 	// Check if base directory exists
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		return profiles, nil
+		return []string{"default"}, nil
 	}
 	
 	profilesDir := filepath.Join(baseDir, "profiles")
 	if _, err := os.Stat(profilesDir); os.IsNotExist(err) {
-		return profiles, nil
+		return []string{"default"}, nil
 	}
 	
 	entries, err := os.ReadDir(profilesDir)
 	if err != nil {
-		return profiles, err
+		return []string{"default"}, err
 	}
 	
 	for _, entry := range entries {
 		if entry.IsDir() {
 			profiles = append(profiles, entry.Name())
 		}
+	}
+	
+	// Ensure default is in the list if profiles dir exists but default doesn't
+	if len(profiles) == 0 {
+		return []string{"default"}, nil
+	}
+	
+	// Check if default profile exists in the list
+	hasDefault := false
+	for _, p := range profiles {
+		if p == "default" {
+			hasDefault = true
+			break
+		}
+	}
+	
+	if !hasDefault {
+		// Add default at the beginning
+		profiles = append([]string{"default"}, profiles...)
 	}
 	
 	return profiles, nil

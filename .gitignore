@@ -1,70 +1,45 @@
 ```
-# Build artifacts
+# Compiled and build artifacts
+*.pyc
+__pycache__/
 *.o
 *.obj
-*.a
-*.so
-*.dll
+*.class
 *.exe
+*.dll
+*.so
+*.a
 *.out
 
 # Dependencies
-vendor/
 node_modules/
-__pycache__/
-*.egg-info/
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Logs
-*.log
-*.out
-*.pid
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Environment variables
+venv/
+.venv/
 .env
 .env.local
 .env.*
-!.env.example
 
-# IDE specific
+# Build directories
+dist/
+build/
+target/
+coverage/
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.gradle/
+
+# Editor/IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-nbproject/
+*.tmp
 
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-*.cover
-coverage.xml
+# Logs
+*.log
 
-# Distribution / packaging
-dist/
-build/
-*.tar.gz
-*.whl
-*.egg
-
-# Python
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.pytest_cache/
-.mypy_cache/
+# System files
+.DS_Store
+Thumbs.db
 ```
