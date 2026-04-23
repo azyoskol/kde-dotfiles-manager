@@ -29,23 +29,15 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	}, nil
 }
 
-// Backup executes backup for specified categories sequentially
+// Backup executes backup for specified categories
+// Strategy: For each source path, preserve its full relative structure from config/data dir
 func (m *Manager) Backup(categories []string) error {
 	dotfilesDir := m.cfg.GetProfileDotfilesDir()
 
-	// Create base directory structure
+	// Create base directory
 	if err := os.MkdirAll(dotfilesDir, 0755); err != nil {
 		return fmt.Errorf("failed to create dotfiles directory: %w", err)
 	}
-
-	// Collect all work items - a file may need to be copied to multiple categories
-	// Use a map to track unique src->dst pairs to avoid duplicate work
-	seen := make(map[string]bool) // Track unique src+dst combinations
-	type workItem struct {
-		src string
-		dst string
-	}
-	var workItems []workItem
 
 	for _, category := range categories {
 		var srcPaths map[string]string
@@ -77,167 +69,86 @@ func (m *Manager) Backup(categories []string) error {
 			continue
 		}
 
-		// Add all source paths for this category
-		for _, srcPath := range srcPaths {
-			// Determine destination path within category
-			info, err := os.Lstat(srcPath)
-			if err != nil && !os.IsNotExist(err) {
-				continue
-			}
-			
-			var relPath string
-			var isDir bool
-			if err == nil {
-				// Check if it's a directory or a symlink to a directory
-				if info.IsDir() {
-					isDir = true
-				} else if info.Mode()&os.ModeSymlink != 0 {
-					// For symlinks, check if target is a directory
-					targetInfo, err := os.Stat(srcPath)
-					if err == nil && targetInfo.IsDir() {
-						isDir = true
-					}
-				}
-				relPath = m.getRelativePathForBackup(srcPath, isDir)
-			} else {
-				relPath = filepath.Base(srcPath)
-			}
-			
-			destPath := filepath.Join(destDir, relPath)
-			
-			// Create unique key for this src->dst pair
-			key := srcPath + "->" + destPath
-			if seen[key] {
-				continue // Skip if we already have this exact copy task
-			}
-			seen[key] = true
-			
-			// Add work item
-			workItems = append(workItems, workItem{src: srcPath, dst: destPath})
-		}
-	}
-
-	// Process all work items sequentially
-	for _, item := range workItems {
-		info, err := os.Lstat(item.src)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue // File doesn't exist, skip silently
-			}
-			return fmt.Errorf("failed to stat %s: %w", item.src, err)
-		}
-
-		// Create parent directories
-		if err := os.MkdirAll(filepath.Dir(item.dst), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", item.dst, err)
-		}
-
-		// Check if it's a directory or a symlink to a directory
-		isDir := info.IsDir()
-		if !isDir && info.Mode()&os.ModeSymlink != 0 {
-			// For symlinks, check if target is a directory
-			targetInfo, err := os.Stat(item.src)
-			if err == nil && targetInfo.IsDir() {
-				isDir = true
-			}
-		}
-
-		if isDir {
-			if err := fileutil.CopyDir(item.src, item.dst); err != nil {
-				return fmt.Errorf("failed to copy directory %s: %w", item.src, err)
-			}
-		} else {
-			if err := fileutil.CopyFile(item.src, item.dst); err != nil {
-				return fmt.Errorf("failed to copy file %s: %w", item.src, err)
-			}
+		if err := m.backupCategory(category, srcPaths, destDir); err != nil {
+			return fmt.Errorf("failed to backup %s: %w", category, err)
 		}
 	}
 
 	return nil
 }
 
-// backupCategory backs up files for a single category
+// backupCategory backs up all source paths for a single category
+// Each source is copied preserving its relative path from config/data directory
 func (m *Manager) backupCategory(name string, srcPaths map[string]string, destDir string) error {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	var errors []string
-	for name, srcPath := range srcPaths {
-		info, err := os.Stat(srcPath)
+	for _, srcPath := range srcPaths {
+		// Check if source exists
+		info, err := os.Lstat(srcPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				continue
+				continue // Skip non-existent files
 			}
-			errors = append(errors, fmt.Sprintf("failed to stat %s: %v", name, err))
-			continue
+			return fmt.Errorf("failed to stat %s: %w", srcPath, err)
 		}
 
-		// Determine destination path
-		var destPath string
-		if info.IsDir() {
-			destPath = filepath.Join(destDir, filepath.Base(srcPath))
-		} else {
-			// For files, preserve directory structure relative to config/data dir
-			relPath := m.getRelativePath(srcPath)
-			destPath = filepath.Join(destDir, relPath)
-		}
+		// Calculate relative path from config/data dir
+		relPath := m.getRelativePath(srcPath)
+		
+		// Build destination path: destDir + relative path
+		destPath := filepath.Join(destDir, relPath)
 
 		// Create parent directories
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to create directory for %s: %v", name, err))
-			continue
+			return fmt.Errorf("failed to create directory for %s: %w", destPath, err)
 		}
 
-		if info.IsDir() {
+		// Determine if it's a directory (including symlinks to directories)
+		isDir := info.IsDir()
+		if !isDir && info.Mode()&os.ModeSymlink != 0 {
+			targetInfo, err := os.Stat(srcPath)
+			if err == nil && targetInfo.IsDir() {
+				isDir = true
+			}
+		}
+
+		// Copy based on type
+		if isDir {
 			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
-				errors = append(errors, fmt.Sprintf("failed to copy directory %s: %v", name, err))
-				continue
+				return fmt.Errorf("failed to copy directory %s: %w", srcPath, err)
 			}
 		} else {
 			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
-				errors = append(errors, fmt.Sprintf("failed to copy file %s: %v", name, err))
-				continue
+				return fmt.Errorf("failed to copy file %s: %w", srcPath, err)
 			}
-		}
-	}
-
-	if len(errors) > 0 {
-		fmt.Printf("Warnings during backup of %s:\n", name)
-		for _, err := range errors {
-			fmt.Printf("  - %s\n", err)
 		}
 	}
 
 	return nil
 }
 
-// getRelativePathForBackup returns the path relative to config or data directory for backup.
-// If isDir is true, it returns just the base name of the directory.
-func (m *Manager) getRelativePathForBackup(path string, isDir bool) string {
-	if isDir {
-		return filepath.Base(path)
-	}
-	return m.getRelativePath(path)
-}
-
 // getRelativePath returns the path relative to config or data directory
+// This preserves the full directory structure for proper restoration
 func (m *Manager) getRelativePath(path string) string {
 	configDir := m.kdePaths.ConfigDir
 	dataDir := m.kdePaths.DataDir
 
-	if strings.HasPrefix(path, configDir) {
+	if strings.HasPrefix(path, configDir+"/") {
 		return strings.TrimPrefix(path, configDir+"/")
 	}
-	if strings.HasPrefix(path, dataDir) {
+	if strings.HasPrefix(path, dataDir+"/") {
 		return strings.TrimPrefix(path, dataDir+"/")
 	}
+	// Fallback: just use the base name
 	return filepath.Base(path)
 }
 
 // Restore restores configurations from backup
+// Strategy: Walk through backup directory and restore each file to its original location
 func (m *Manager) Restore(profile string) error {
-	// Calculate the correct profile path
+	// Calculate profile path
 	baseDir := m.cfg.ExpandPath()
 	profilePath := filepath.Join(baseDir, "profiles", profile)
 
@@ -246,7 +157,7 @@ func (m *Manager) Restore(profile string) error {
 		return fmt.Errorf("profile '%s' does not exist", profile)
 	}
 
-	// Get all available categories from backup
+	// Get all available categories
 	categories := []string{"shortcuts", "themes", "window_management", "languages", "widgets", "panels", "system_settings"}
 
 	for _, category := range categories {
@@ -255,27 +166,7 @@ func (m *Manager) Restore(profile string) error {
 			continue
 		}
 
-		var destPaths map[string]string
-		switch category {
-		case "shortcuts":
-			destPaths = m.kdePaths.ShortcutPaths()
-		case "themes":
-			destPaths = m.kdePaths.ThemePaths()
-		case "window_management":
-			destPaths = m.kdePaths.KWinPaths()
-		case "languages":
-			destPaths = m.kdePaths.LocalePaths()
-		case "widgets":
-			destPaths = m.kdePaths.WidgetPaths()
-		case "panels":
-			destPaths = m.kdePaths.PanelPaths()
-		case "system_settings":
-			destPaths = m.kdePaths.SystemSettingsPaths()
-		default:
-			continue
-		}
-
-		if err := m.restoreCategory(category, backupDir, destPaths); err != nil {
+		if err := m.restoreCategory(category, backupDir); err != nil {
 			return fmt.Errorf("failed to restore %s: %w", category, err)
 		}
 	}
@@ -283,93 +174,130 @@ func (m *Manager) Restore(profile string) error {
 	return nil
 }
 
-// restoreCategory restores files for a single category
-func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]string) error {
-	// Track which destinations have been restored to avoid duplicate work
-	restored := make(map[string]bool)
-	
-	for name, destPath := range destPaths {
-		// Skip if already restored to this destination
-		if restored[destPath] {
-			continue
-		}
-		
-		// Try to find the source file in backup using multiple strategies
-		var srcFile string
-		var srcInfo os.FileInfo
-		var found bool
-		
-		// Strategy 1: Try relative path (for files with directory structure)
-		relPath := m.getRelativePath(destPath)
-		candidate := filepath.Join(backupDir, relPath)
-		if info, err := os.Stat(candidate); err == nil {
-			srcFile = candidate
-			srcInfo = info
-			found = true
-		}
-		
-		// Strategy 2: Try just the base name (for directories backed up at root level)
-		if !found {
-			baseName := filepath.Base(destPath)
-			candidate = filepath.Join(backupDir, baseName)
-			if info, err := os.Stat(candidate); err == nil {
-				srcFile = candidate
-				srcInfo = info
-				found = true
-			}
-		}
-		
-		// Skip if not found in backup
-		if !found {
-			continue
+// restoreCategory restores all files from backup directory to their original locations
+// It walks through the backup directory and uses the relative path to determine destination
+func (m *Manager) restoreCategory(name, backupDir string) error {
+	// Walk through all files in backup directory
+	return filepath.Walk(backupDir, func(srcPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
 
-		// Create parent directories for destination
-		parent := filepath.Dir(destPath)
-		if err := fileutil.EnsureDir(parent, 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", name, err)
+		// Skip the root backup directory itself
+		if srcPath == backupDir {
+			return nil
+		}
+
+		// Calculate relative path within backup
+		relPath, err := filepath.Rel(backupDir, srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to calculate relative path: %w", err)
+		}
+
+		// Determine destination based on category and relative path
+		destPath := m.getDestinationForRestore(name, relPath)
+		if destPath == "" {
+			return nil // Skip if we can't determine destination
+		}
+
+		// Skip if already processed (for symlinks that might be visited twice)
+		if _, err := os.Lstat(destPath); err == nil {
+			// Destination exists, will be overwritten
+		}
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", destPath, err)
+		}
+
+		// Remove existing destination if it exists (to handle type changes)
+		if info, err := os.Lstat(destPath); err == nil {
+			if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+				if err := os.RemoveAll(destPath); err != nil {
+					return fmt.Errorf("failed to remove existing directory %s: %w", destPath, err)
+				}
+			} else {
+				if err := os.Remove(destPath); err != nil {
+					return fmt.Errorf("failed to remove existing file %s: %w", destPath, err)
+				}
+			}
+		}
+
+		// Determine if source is a directory
+		isDir := info.IsDir()
+		if !isDir && info.Mode()&os.ModeSymlink != 0 {
+			targetInfo, err := os.Stat(srcPath)
+			if err == nil && targetInfo.IsDir() {
+				isDir = true
+			}
 		}
 
 		// Copy based on type
-		if srcInfo.IsDir() {
-			if err := fileutil.CopyDir(srcFile, destPath); err != nil {
-				return fmt.Errorf("failed to restore %s: %w", name, err)
+		if isDir {
+			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to restore directory %s: %w", destPath, err)
 			}
 		} else {
-			if err := fileutil.CopyFile(srcFile, destPath); err != nil {
-				return fmt.Errorf("failed to restore %s: %w", name, err)
+			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
+				return fmt.Errorf("failed to restore file %s: %w", destPath, err)
 			}
 		}
-		
-		// Mark this destination as restored
-		restored[destPath] = true
+
+		return nil
+	})
+}
+
+// getDestinationForRestore determines the destination path for a given category and relative path
+func (m *Manager) getDestinationForRestore(category, relPath string) string {
+	var basePath string
+	
+	switch category {
+	case "shortcuts":
+		basePath = m.getFirstExistingPath(m.kdePaths.ShortcutPaths())
+	case "themes":
+		basePath = m.getFirstExistingPath(m.kdePaths.ThemePaths())
+	case "window_management":
+		basePath = m.getFirstExistingPath(m.kdePaths.KWinPaths())
+	case "languages":
+		basePath = m.getFirstExistingPath(m.kdePaths.LocalePaths())
+	case "widgets":
+		basePath = m.getFirstExistingPath(m.kdePaths.WidgetPaths())
+	case "panels":
+		basePath = m.getFirstExistingPath(m.kdePaths.PanelPaths())
+	case "system_settings":
+		basePath = m.getFirstExistingPath(m.kdePaths.SystemSettingsPaths())
+	default:
+		return ""
 	}
 
-	return nil
+	if basePath == "" {
+		return ""
+	}
+
+	// Reconstruct the full destination path
+	// The relative path should be appended to the base directory of the first path
+	baseDir := filepath.Dir(basePath)
+	return filepath.Join(baseDir, relPath)
 }
 
-// copyFile copies a single file or symbolic link
-// Deprecated: Use fileutil.CopyFile instead
-func copyFile(src, dst string) error {
-	return fileutil.CopyFile(src, dst)
-}
-
-// copyDir recursively copies a directory
-// Deprecated: Use fileutil.CopyDir instead
-func copyDir(src, dst string) error {
-	return fileutil.CopyDir(src, dst)
+// getFirstExistingPath returns the first existing path from a map of paths
+func (m *Manager) getFirstExistingPath(paths map[string]string) string {
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	// If none exist, return the first one anyway (it will be created)
+	for _, path := range paths {
+		return path
+	}
+	return ""
 }
 
 // GetBackupSize calculates the total size of a backup profile in bytes
 func (m *Manager) GetBackupSize(profile string) (uint64, error) {
 	baseDir := m.cfg.ExpandPath()
-	var profilePath string
-	
-	if profile == "default" {
-		profilePath = filepath.Join(baseDir, "profiles", "default")
-	} else {
-		profilePath = filepath.Join(baseDir, "profiles", profile)
-	}
+	profilePath := filepath.Join(baseDir, "profiles", profile)
 	
 	// Check if profile directory exists
 	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
@@ -385,7 +313,6 @@ func (m *Manager) GetBackupSize(profile string) (uint64, error) {
 }
 
 // FormatSize formats bytes into human-readable string
-// Deprecated: Use fileutil.FormatSize instead
 func FormatSize(bytes uint64) string {
 	return fileutil.FormatSize(bytes)
 }
