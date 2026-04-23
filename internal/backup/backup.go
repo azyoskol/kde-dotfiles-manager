@@ -266,7 +266,24 @@ func (m *Manager) getDestinationForRestore(category, relPath string) string {
 	case "shortcuts":
 		basePath = m.getFirstExistingPath(m.kdePaths.ShortcutPaths())
 	case "themes":
-		basePath = m.getFirstExistingPath(m.kdePaths.ThemePaths())
+		// Special handling for icons and cursor themes - they go to DataDir/icons
+		if relPath == "icons" || strings.HasPrefix(relPath, "icons/") {
+			basePath = m.kdePaths.DataDir + "/icons"
+		} else if relPath == "color-schemes" || strings.HasPrefix(relPath, "color-schemes/") {
+			basePath = m.kdePaths.DataDir + "/color-schemes"
+		} else if relPath == "wallpapers" || strings.HasPrefix(relPath, "wallpapers/") {
+			basePath = m.kdePaths.DataDir + "/wallpapers"
+		} else if relPath == "fonts" || strings.HasPrefix(relPath, "fonts/") {
+			basePath = m.kdePaths.DataDir + "/fonts"
+		} else if relPath == "sounds" || strings.HasPrefix(relPath, "sounds/") {
+			basePath = m.kdePaths.DataDir + "/sounds"
+		} else if relPath == "plasma/look-and-feel" || strings.HasPrefix(relPath, "plasma/look-and-feel/") {
+			basePath = m.kdePaths.DataDir + "/plasma/look-and-feel"
+		} else if relPath == "aurorae/themes" || strings.HasPrefix(relPath, "aurorae/themes/") {
+			basePath = m.kdePaths.DataDir + "/aurorae/themes"
+		} else {
+			basePath = m.getFirstExistingPath(m.kdePaths.ThemePaths())
+		}
 	case "window_management":
 		basePath = m.getFirstExistingPath(m.kdePaths.KWinPaths())
 	case "languages":
@@ -288,6 +305,39 @@ func (m *Manager) getDestinationForRestore(category, relPath string) string {
 	// Reconstruct the full destination path
 	// The relative path should be appended to the base directory of the first path
 	baseDir := filepath.Dir(basePath)
+	
+	// For special directories that are already absolute paths, use them directly
+	if category == "themes" && (relPath == "icons" || relPath == "color-schemes" || 
+		relPath == "wallpapers" || relPath == "fonts" || relPath == "sounds" ||
+		relPath == "plasma/look-and-feel" || relPath == "aurorae/themes") {
+		return basePath
+	}
+	
+	// For subdirectories within special directories
+	if category == "themes" {
+		if strings.HasPrefix(relPath, "icons/") {
+			return m.kdePaths.DataDir + "/icons/" + strings.TrimPrefix(relPath, "icons/")
+		}
+		if strings.HasPrefix(relPath, "color-schemes/") {
+			return m.kdePaths.DataDir + "/color-schemes/" + strings.TrimPrefix(relPath, "color-schemes/")
+		}
+		if strings.HasPrefix(relPath, "wallpapers/") {
+			return m.kdePaths.DataDir + "/wallpapers/" + strings.TrimPrefix(relPath, "wallpapers/")
+		}
+		if strings.HasPrefix(relPath, "fonts/") {
+			return m.kdePaths.DataDir + "/fonts/" + strings.TrimPrefix(relPath, "fonts/")
+		}
+		if strings.HasPrefix(relPath, "sounds/") {
+			return m.kdePaths.DataDir + "/sounds/" + strings.TrimPrefix(relPath, "sounds/")
+		}
+		if strings.HasPrefix(relPath, "plasma/look-and-feel/") {
+			return m.kdePaths.DataDir + "/plasma/look-and-feel/" + strings.TrimPrefix(relPath, "plasma/look-and-feel/")
+		}
+		if strings.HasPrefix(relPath, "aurorae/themes/") {
+			return m.kdePaths.DataDir + "/aurorae/themes/" + strings.TrimPrefix(relPath, "aurorae/themes/")
+		}
+	}
+	
 	return filepath.Join(baseDir, relPath)
 }
 
