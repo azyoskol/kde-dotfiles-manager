@@ -1,29 +1,16 @@
 ```
-# Build artifacts
+# Compiled and build artifacts
 *.o
 *.obj
-*.a
-*.lib
-*.so
-*.dll
-*.exe
 *.out
 
 # Dependencies
 vendor/
-*.mod
-*.sum
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
 
 # Environment
 .env
@@ -33,9 +20,13 @@ vendor/
 # Coverage
 coverage/
 htmlcov/
-*.coverage
+.coverage
 
-# OS
+# Editors
+.vscode/
+.idea/
+
+# System files
 .DS_Store
 Thumbs.db
 ```
