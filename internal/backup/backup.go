@@ -294,9 +294,18 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 		srcInfo, err := os.Stat(srcFile)
 		if err != nil {
 			if os.IsNotExist(err) {
-				continue
+				// Try alternative: maybe it was backed up as just the base name
+				// This happens when a directory is backed up with just its base name
+				altSrcFile := filepath.Join(backupDir, filepath.Base(destPath))
+				if altInfo, altErr := os.Stat(altSrcFile); altErr == nil {
+					srcFile = altSrcFile
+					srcInfo = altInfo
+				} else {
+					continue
+				}
+			} else {
+				return fmt.Errorf("failed to stat %s: %w", srcFile, err)
 			}
-			return fmt.Errorf("failed to stat %s: %w", srcFile, err)
 		}
 
 		// Create parent directories for destination
