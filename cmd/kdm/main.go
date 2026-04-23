@@ -208,4 +208,9 @@ var (
 				Background(lipgloss.Color("#333333")).
 				Padding(0, 2).
 				MarginRight(1)
+
+	inputStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.Color("#444444")).
+			Padding(0, 1)
 )
