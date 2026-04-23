@@ -216,48 +216,37 @@ func (s *restoreScreen) viewWidgetInstall(b *strings.Builder) string {
 
 // discoverProfiles finds available backup profiles in the dotfiles directory
 func (s *restoreScreen) discoverProfiles() []string {
-	dotfilesDir := s.cfg.GetProfileDotfilesDir()
+	baseDir := s.cfg.ExpandPath()
+	profilesDir := filepath.Join(baseDir, "profiles")
 	var profiles []string
-
-	// For default profile, check both root and profiles subdirectory
-	if s.cfg.Profile == "" || s.cfg.Profile == "default" {
-		baseDir := s.cfg.ExpandPath()
-		profilesDir := filepath.Join(baseDir, "profiles")
-		
-		// Check profiles subdirectory
-		if entries, err := os.ReadDir(profilesDir); err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() && entry.Name() != ".git" {
-					profiles = append(profiles, entry.Name())
-				}
+	
+	// Check profiles subdirectory
+	if entries, err := os.ReadDir(profilesDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && entry.Name() != ".git" {
+				profiles = append(profiles, entry.Name())
 			}
 		}
-		
-		// Also check for legacy backups in root directory
-		if entries, err := os.ReadDir(baseDir); err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() && entry.Name() != ".git" && entry.Name() != "profiles" {
-					// Check if this looks like a backup (has config files)
-					configPath := filepath.Join(baseDir, entry.Name(), "config")
-					if _, err := os.Stat(configPath); err == nil {
-						profiles = append(profiles, entry.Name())
-					}
-				}
-			}
-		}
-		
-		if len(profiles) == 0 {
-			return []string{"No backups found"}
-		}
-		return profiles
 	}
 	
-	// For named profiles, just return the current profile if it exists
-	if _, err := os.Stat(dotfilesDir); err == nil {
-		return []string{s.cfg.Profile}
+	if len(profiles) == 0 {
+		return []string{"No backups found"}
 	}
 	
-	return []string{"No backups found"}
+	// Ensure default is in the list
+	hasDefault := false
+	for _, p := range profiles {
+		if p == "default" {
+			hasDefault = true
+			break
+		}
+	}
+	
+	if !hasDefault {
+		profiles = append([]string{"default"}, profiles...)
+	}
+	
+	return profiles
 }
 
 // executeRestore restores configurations using the Go manager
