@@ -176,10 +176,18 @@ func (m *Manager) getRelativePath(path string) string {
 
 // Restore restores configurations from backup
 func (m *Manager) Restore(profile string) error {
-	dotfilesDir := m.cfg.GetProfileDotfilesDir()
+	// Calculate the correct profile path
+	baseDir := m.cfg.ExpandPath()
+	var profilePath string
+	
+	if profile == "default" {
+		profilePath = filepath.Join(baseDir, "profiles", "default")
+	} else {
+		profilePath = filepath.Join(baseDir, "profiles", profile)
+	}
 
 	// Check if profile directory exists
-	if _, err := os.Stat(dotfilesDir); os.IsNotExist(err) {
+	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
 		return fmt.Errorf("profile '%s' does not exist", profile)
 	}
 
@@ -187,7 +195,7 @@ func (m *Manager) Restore(profile string) error {
 	categories := []string{"shortcuts", "themes", "window_management", "languages", "widgets", "panels", "system_settings"}
 
 	for _, category := range categories {
-		backupDir := filepath.Join(dotfilesDir, category)
+		backupDir := filepath.Join(profilePath, category)
 		if _, err := os.Stat(backupDir); os.IsNotExist(err) {
 			continue
 		}
@@ -258,15 +266,13 @@ func copyDir(src, dst string) error {
 
 // GetBackupSize calculates the total size of a backup profile in bytes
 func (m *Manager) GetBackupSize(profile string) (uint64, error) {
-	dotfilesDir := m.cfg.GetProfileDotfilesDir()
-	
-	// For default profile, construct the full path
+	baseDir := m.cfg.ExpandPath()
 	var profilePath string
-	if m.cfg.Profile == "" || m.cfg.Profile == "default" {
-		baseDir := m.cfg.ExpandPath()
-		profilePath = filepath.Join(baseDir, profile)
+	
+	if profile == "default" {
+		profilePath = filepath.Join(baseDir, "profiles", "default")
 	} else {
-		profilePath = dotfilesDir
+		profilePath = filepath.Join(baseDir, "profiles", profile)
 	}
 	
 	// Check if profile directory exists
