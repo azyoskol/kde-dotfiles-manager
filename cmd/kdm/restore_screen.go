@@ -263,29 +263,6 @@ func (s *restoreScreen) discoverProfiles() []string {
 // executeRestore restores configurations using the Go manager
 func (s *restoreScreen) executeRestore() (tea.Model, tea.Cmd) {
 	profile := s.profiles[s.cursor]
-	dotfilesDir := s.cfg.GetProfileDotfilesDir()
-	
-	// For default profile, construct the full path
-	var profilePath string
-	if s.cfg.Profile == "" || s.cfg.Profile == "default" {
-		baseDir := s.cfg.ExpandPath()
-		profilePath = filepath.Join(baseDir, profile)
-	} else {
-		profilePath = dotfilesDir
-	}
-
-	// Check if profile directory exists
-	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
-		s.message = fmt.Sprintf("Profile '%s' does not exist", profile)
-		s.messageType = "error"
-		return s, nil
-	}
-
-	// Create backup before restore if configured
-	if s.cfg.BackupBeforeRestore {
-		s.message = "Creating backup before restore..."
-		s.messageType = "info"
-	}
 
 	if s.backupMgr == nil {
 		s.message = "Backup manager not initialized"
@@ -293,7 +270,7 @@ func (s *restoreScreen) executeRestore() (tea.Model, tea.Cmd) {
 		return s, nil
 	}
 
-	// Run restore using Go manager
+	// Run restore using Go manager - it will handle profile path resolution
 	err := s.backupMgr.Restore(profile)
 
 	if err != nil {
@@ -301,6 +278,10 @@ func (s *restoreScreen) executeRestore() (tea.Model, tea.Cmd) {
 		s.messageType = "error"
 		return s, nil
 	}
+
+	// After successful restore, get the profile path for widget check
+	baseDir := s.cfg.ExpandPath()
+	profilePath := filepath.Join(baseDir, "profiles", profile)
 
 	// After successful restore, check for custom widgets to install
 	s.message = fmt.Sprintf("Restore completed from profile: %s", profile)
