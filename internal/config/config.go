@@ -108,9 +108,7 @@ func (c *Config) ExpandPath() string {
 // GetProfileDotfilesDir returns the dotfiles directory for the current profile
 func (c *Config) GetProfileDotfilesDir() string {
 	baseDir := c.ExpandPath()
-	if c.Profile == "" || c.Profile == "default" {
-		return baseDir
-	}
+	// All profiles including 'default' are stored in the profiles subdirectory
 	return filepath.Join(baseDir, "profiles", c.Profile)
 }
 
