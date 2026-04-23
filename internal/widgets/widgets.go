@@ -194,16 +194,16 @@ func containsWidget(widgets []WidgetInfo, plugin string) bool {
 	return false
 }
 
-// InstallWidget installs a widget from a .plasmoid package file
+// InstallWidget installs a widget from a .plasmoid package file using kpackagetool6
 func InstallWidget(packagePath, dataDir string) error {
-	// Check if plasmashell is available
-	cmd := exec.Command("plasmapkg2", "-i", packagePath)
+	// Use kpackagetool6 for KDE Plasma 6+
+	cmd := exec.Command("kpackagetool6", "--install", packagePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	
 	if err := cmd.Run(); err != nil {
-		// Try fallback to older plasmapkg
-		cmd = exec.Command("plasmapkg", "-i", packagePath)
+		// Fallback to kpackagetool5 for older versions
+		cmd = exec.Command("kpackagetool5", "--install", packagePath)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -266,13 +266,12 @@ func InstallWidgetsFromBackup(backupDir, dataDir string, dryRun bool) ([]string,
 			continue
 		}
 		
-		// Try to install using plasmapkg2 if there's a .plasmoid package
+		// Try to install using kpackagetool6 if there's a .plasmoid package
 		packageFile := filepath.Join(widgetPath, "contents", "code", "main.qml")
 		if _, err := os.Stat(packageFile); err == nil {
-			// This is an unpacked widget, need to package it first or copy directly
-			destPath := filepath.Join(dataDir, "plasma", "plasmoids", widgetName)
-			if err := copyDir(widgetPath, destPath); err != nil {
-				errors = append(errors, fmt.Sprintf("Failed to copy widget %s: %v", widgetName, err))
+			// This is an unpacked widget, use kpackagetool6 to install directly from directory
+			if err := InstallWidget(widgetPath, dataDir); err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to install widget %s: %v", widgetName, err))
 				continue
 			}
 			installed = append(installed, widgetName)
@@ -287,14 +286,13 @@ func InstallWidgetsFromBackup(backupDir, dataDir string, dryRun bool) ([]string,
 				}
 				installed = append(installed, widgetName)
 			} else {
-				// Direct copy as fallback
-				destPath := filepath.Join(dataDir, "plasma", "plasmoids", widgetName)
-				if err := copyDir(widgetPath, destPath); err != nil {
-					errors = append(errors, fmt.Sprintf("Failed to copy widget %s: %v", widgetName, err))
+				// Direct copy as fallback (kpackagetool6 can also work with unpacked directories)
+				if err := InstallWidget(widgetPath, dataDir); err != nil {
+					errors = append(errors, fmt.Sprintf("Failed to install widget %s: %v", widgetName, err))
 					continue
 				}
 				installed = append(installed, widgetName)
-				fmt.Printf("Installed widget (direct copy): %s\n", widgetName)
+				fmt.Printf("Installed widget (from directory): %s\n", widgetName)
 			}
 		}
 	}

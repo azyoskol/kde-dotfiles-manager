@@ -15,12 +15,14 @@ type Config struct {
 	Categories          []string `yaml:"categories"`
 	BackupBeforeRestore bool     `yaml:"backup_before_restore"`
 	Verbose             bool     `yaml:"verbose"`
+	Profile             string   `yaml:"profile,omitempty"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
 		DotfilesDir:         "~/kde-dotfiles",
+		Profile:             "default",
 		Categories:          defaultCategories(),
 		BackupBeforeRestore: true,
 		Verbose:             false,
@@ -101,4 +103,50 @@ func (c *Config) ExpandPath() string {
 		return filepath.Join(home, dir[1:])
 	}
 	return dir
+}
+
+// GetProfileDotfilesDir returns the dotfiles directory for the current profile
+func (c *Config) GetProfileDotfilesDir() string {
+	baseDir := c.ExpandPath()
+	if c.Profile == "" || c.Profile == "default" {
+		return baseDir
+	}
+	return filepath.Join(baseDir, "profiles", c.Profile)
+}
+
+// SetProfile changes the current profile and updates the config file
+func (c *Config) SetProfile(profile string) error {
+	c.Profile = profile
+	return c.Save()
+}
+
+// ListProfiles returns a list of available profiles
+func ListProfiles() ([]string, error) {
+	cfg := DefaultConfig()
+	baseDir := cfg.ExpandPath()
+	
+	profiles := []string{"default"}
+	
+	// Check if base directory exists
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		return profiles, nil
+	}
+	
+	profilesDir := filepath.Join(baseDir, "profiles")
+	if _, err := os.Stat(profilesDir); os.IsNotExist(err) {
+		return profiles, nil
+	}
+	
+	entries, err := os.ReadDir(profilesDir)
+	if err != nil {
+		return profiles, err
+	}
+	
+	for _, entry := range entries {
+		if entry.IsDir() {
+			profiles = append(profiles, entry.Name())
+		}
+	}
+	
+	return profiles, nil
 }

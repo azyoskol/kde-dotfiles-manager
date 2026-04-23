@@ -10,39 +10,24 @@ vendor/
 # Logs and temp files
 *.log
 *.tmp
-*.swp
-
-# Editors
-.vscode/
-.idea/
 
 # Environment
 .env
 .env.local
-.env.*
+*.env.*
+
+# Editors
+.vscode/
+.idea/
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Build directories
-bin/
-dist/
-build/
-target/
-
-# Package management
-node_modules/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.gradle/
-.cargo/
-zig-cache/
-.julia/
-
-# System files
-.DS_Store
-Thumbs.db
+# Backup and temporary directories
+backup_*/
+temp_*/
+*.bak
+*.tmp
 ```

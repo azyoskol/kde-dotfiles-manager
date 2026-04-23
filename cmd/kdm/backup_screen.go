@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/user/kde-dotfiles-manager/internal/config"
 	"github.com/user/kde-dotfiles-manager/internal/kde"
+	"github.com/user/kde-dotfiles-manager/internal/backup"
 )
 
 // backupScreen handles the backup functionality
@@ -15,6 +15,7 @@ type backupScreen struct {
 	parent     *model
 	cfg        *config.Config
 	kdePaths   *kde.Paths
+	backupMgr  *backup.Manager
 	categories []categoryItem
 	cursor     int
 	selected   map[int]bool
@@ -36,12 +37,19 @@ func newBackupScreen(parent *model) *backupScreen {
 	if err != nil {
 		paths = &kde.Paths{}
 	}
+	
+	backupMgr, err := backup.NewManager(parent.cfg)
+	if err != nil {
+		backupMgr = nil
+	}
+	
 	s := &backupScreen{
-		parent:   parent,
-		cfg:      parent.cfg,
-		kdePaths: paths,
-		selected: make(map[int]bool),
-		cursor:   0,
+		parent:    parent,
+		cfg:       parent.cfg,
+		kdePaths:  paths,
+		backupMgr: backupMgr,
+		selected:  make(map[int]bool),
+		cursor:    0,
 	}
 
 	// Initialize categories
@@ -175,7 +183,7 @@ func (s *backupScreen) View() string {
 	return b.String()
 }
 
-// executeBackup runs the backup bash script
+// executeBackup runs the backup using the Go manager
 func (s *backupScreen) executeBackup() (tea.Model, tea.Cmd) {
 	var selectedCats []string
 	for i, cat := range s.categories {
@@ -190,22 +198,17 @@ func (s *backupScreen) executeBackup() (tea.Model, tea.Cmd) {
 		return s, nil
 	}
 
-	// Build the backup command
-	scriptPath := "scripts/backup.sh"
-	args := []string{
-		"--dotfiles-dir", s.cfg.ExpandPath(),
-		"--categories", strings.Join(selectedCats, ","),
+	if s.backupMgr == nil {
+		s.message = "Backup manager not initialized"
+		s.messageType = "error"
+		return s, nil
 	}
 
-	if s.cfg.Verbose {
-		args = append(args, "--verbose")
-	}
-
-	cmd := exec.Command("bash", append([]string{scriptPath}, args...)...)
-	output, err := cmd.CombinedOutput()
+	// Execute backup using Go manager
+	err := s.backupMgr.Backup(selectedCats)
 
 	if err != nil {
-		s.message = fmt.Sprintf("Backup failed: %s", string(output))
+		s.message = fmt.Sprintf("Backup failed: %v", err)
 		s.messageType = "error"
 	} else {
 		s.message = fmt.Sprintf("Backup completed successfully for: %s", strings.Join(selectedCats, ", "))
