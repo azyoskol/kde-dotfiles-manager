@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/user/kde-dotfiles-manager/internal/fileutil"
 )
 
 // WidgetInfo represents a single Plasma widget
@@ -306,7 +308,7 @@ func InstallWidgetsFromBackup(backupDir, dataDir string, dryRun bool) ([]string,
 
 // Backup copies widget configuration files
 func Backup(srcPaths map[string]string, destDir string) error {
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := fileutil.EnsureDir(destDir, 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -322,11 +324,11 @@ func Backup(srcPaths map[string]string, destDir string) error {
 		destPath := filepath.Join(destDir, filepath.Base(srcPath))
 
 		if info.IsDir() {
-			if err := copyDir(srcPath, destPath); err != nil {
+			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
 				return fmt.Errorf("failed to copy directory %s: %w", name, err)
 			}
 		} else {
-			if err := copyFile(srcPath, destPath); err != nil {
+			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
 				return fmt.Errorf("failed to copy file %s: %w", name, err)
 			}
 		}
@@ -345,50 +347,12 @@ func Restore(backupDir string, srcPaths map[string]string) error {
 		}
 
 		parent := filepath.Dir(destPath)
-		if err := os.MkdirAll(parent, 0755); err != nil {
+		if err := fileutil.EnsureDir(parent, 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", name, err)
 		}
 
-		if err := copyFile(srcFile, destPath); err != nil {
+		if err := fileutil.CopyFile(srcFile, destPath); err != nil {
 			return fmt.Errorf("failed to restore %s: %w", name, err)
-		}
-	}
-
-	return nil
-}
-
-// copyFile copies a single file
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0644)
-}
-
-// copyDir recursively copies a directory
-func copyDir(src, dst string) error {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return err
-			}
 		}
 	}
 

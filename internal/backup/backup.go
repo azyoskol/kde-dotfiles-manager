@@ -5,10 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/user/kde-dotfiles-manager/internal/config"
+	"github.com/user/kde-dotfiles-manager/internal/fileutil"
 	"github.com/user/kde-dotfiles-manager/internal/kde"
-	"github.com/user/kde-dotfiles-manager/internal/widgets"
 )
 
 // Manager handles backup and restore operations for KDE configurations
@@ -29,7 +30,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	}, nil
 }
 
-// Backup executes backup for specified categories
+// Backup executes backup for specified categories using goroutines for parallel processing
 func (m *Manager) Backup(categories []string) error {
 	dotfilesDir := m.cfg.GetProfileDotfilesDir()
 
@@ -38,39 +39,66 @@ func (m *Manager) Backup(categories []string) error {
 		return fmt.Errorf("failed to create dotfiles directory: %w", err)
 	}
 
+	// Use WaitGroup to wait for all goroutines to complete
+	var wg sync.WaitGroup
+	errorChan := make(chan error, len(categories))
+
 	for _, category := range categories {
-		var srcPaths map[string]string
-		var destDir string
+		wg.Add(1)
+		go func(cat string) {
+			defer wg.Done()
+			
+			var srcPaths map[string]string
+			var destDir string
 
-		switch category {
-		case "shortcuts":
-			srcPaths = m.kdePaths.ShortcutPaths()
-			destDir = filepath.Join(dotfilesDir, "shortcuts")
-		case "themes":
-			srcPaths = m.kdePaths.ThemePaths()
-			destDir = filepath.Join(dotfilesDir, "themes")
-		case "window_management":
-			srcPaths = m.kdePaths.KWinPaths()
-			destDir = filepath.Join(dotfilesDir, "window_management")
-		case "languages":
-			srcPaths = m.kdePaths.LocalePaths()
-			destDir = filepath.Join(dotfilesDir, "languages")
-		case "widgets":
-			srcPaths = m.kdePaths.WidgetPaths()
-			destDir = filepath.Join(dotfilesDir, "widgets")
-		case "panels":
-			srcPaths = m.kdePaths.PanelPaths()
-			destDir = filepath.Join(dotfilesDir, "panels")
-		case "system_settings":
-			srcPaths = m.kdePaths.SystemSettingsPaths()
-			destDir = filepath.Join(dotfilesDir, "system_settings")
-		default:
-			continue
-		}
+			switch cat {
+			case "shortcuts":
+				srcPaths = m.kdePaths.ShortcutPaths()
+				destDir = filepath.Join(dotfilesDir, "shortcuts")
+			case "themes":
+				srcPaths = m.kdePaths.ThemePaths()
+				destDir = filepath.Join(dotfilesDir, "themes")
+			case "window_management":
+				srcPaths = m.kdePaths.KWinPaths()
+				destDir = filepath.Join(dotfilesDir, "window_management")
+			case "languages":
+				srcPaths = m.kdePaths.LocalePaths()
+				destDir = filepath.Join(dotfilesDir, "languages")
+			case "widgets":
+				srcPaths = m.kdePaths.WidgetPaths()
+				destDir = filepath.Join(dotfilesDir, "widgets")
+			case "panels":
+				srcPaths = m.kdePaths.PanelPaths()
+				destDir = filepath.Join(dotfilesDir, "panels")
+			case "system_settings":
+				srcPaths = m.kdePaths.SystemSettingsPaths()
+				destDir = filepath.Join(dotfilesDir, "system_settings")
+			default:
+				return
+			}
 
-		if err := m.backupCategory(category, srcPaths, destDir); err != nil {
-			return fmt.Errorf("failed to backup %s: %w", category, err)
+			if err := m.backupCategory(cat, srcPaths, destDir); err != nil {
+				errorChan <- fmt.Errorf("failed to backup %s: %w", cat, err)
+			}
+		}(category)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	close(errorChan)
+
+	// Collect any errors
+	var errors []error
+	for err := range errorChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		// Return the first error, but log all of them
+		for _, err := range errors[1:] {
+			fmt.Printf("Additional error: %v\n", err)
 		}
+		return errors[0]
 	}
 
 	return nil
@@ -110,12 +138,12 @@ func (m *Manager) backupCategory(name string, srcPaths map[string]string, destDi
 		}
 
 		if info.IsDir() {
-			if err := copyDir(srcPath, destPath); err != nil {
+			if err := fileutil.CopyDir(srcPath, destPath); err != nil {
 				errors = append(errors, fmt.Sprintf("failed to copy directory %s: %v", name, err))
 				continue
 			}
 		} else {
-			if err := copyFile(srcPath, destPath); err != nil {
+			if err := fileutil.CopyFile(srcPath, destPath); err != nil {
 				errors = append(errors, fmt.Sprintf("failed to copy file %s: %v", name, err))
 				continue
 			}
@@ -204,11 +232,11 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 		}
 
 		parent := filepath.Dir(destPath)
-		if err := os.MkdirAll(parent, 0755); err != nil {
+		if err := fileutil.EnsureDir(parent, 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", name, err)
 		}
 
-		if err := copyFile(srcFile, destPath); err != nil {
+		if err := fileutil.CopyFile(srcFile, destPath); err != nil {
 			return fmt.Errorf("failed to restore %s: %w", name, err)
 		}
 	}
@@ -217,155 +245,15 @@ func (m *Manager) restoreCategory(name, backupDir string, destPaths map[string]s
 }
 
 // copyFile copies a single file or symbolic link
+// Deprecated: Use fileutil.CopyFile instead
 func copyFile(src, dst string) error {
-	// Use Lstat to not follow symlinks
-	info, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-
-	// Check if destination already exists
-	if _, err := os.Lstat(dst); err == nil {
-		// Destination exists, remove it first
-		if err := os.RemoveAll(dst); err != nil {
-			return fmt.Errorf("failed to remove existing destination %s: %w", dst, err)
-		}
-	}
-
-	// Handle symbolic links
-	if info.Mode()&os.ModeSymlink != 0 {
-		linkTarget, err := os.Readlink(src)
-		if err != nil {
-			return fmt.Errorf("failed to read symlink %s: %w", src, err)
-		}
-		// Create parent directory if needed
-		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for symlink %s: %w", dst, err)
-		}
-		if err := os.Symlink(linkTarget, dst); err != nil {
-			return fmt.Errorf("failed to create symlink %s: %w", dst, err)
-		}
-		return nil
-	}
-
-	// Regular file
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	// Create parent directory if needed
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return fmt.Errorf("failed to create directory for file %s: %w", dst, err)
-	}
-	return os.WriteFile(dst, data, info.Mode())
+	return fileutil.CopyFile(src, dst)
 }
 
 // copyDir recursively copies a directory
+// Deprecated: Use fileutil.CopyDir instead
 func copyDir(src, dst string) error {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		// Get full file info to check for symlinks
-		info, err := os.Lstat(srcPath)
-		if err != nil {
-			return fmt.Errorf("failed to stat %s: %w", srcPath, err)
-		}
-
-		// Check if destination already exists and remove it
-		if _, err := os.Lstat(dstPath); err == nil {
-			if err := os.RemoveAll(dstPath); err != nil {
-				return fmt.Errorf("failed to remove existing destination %s: %w", dstPath, err)
-			}
-		}
-
-		// Handle symbolic links
-		if info.Mode()&os.ModeSymlink != 0 {
-			linkTarget, err := os.Readlink(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to read symlink %s: %w", srcPath, err)
-			}
-			if err := os.Symlink(linkTarget, dstPath); err != nil {
-				return fmt.Errorf("failed to create symlink %s: %w", dstPath, err)
-			}
-			continue
-		}
-
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// GetCustomWidgetsFromBackup finds custom widgets in backup that are not installed
-func (m *Manager) GetCustomWidgetsFromBackup() ([]string, error) {
-	dotfilesDir := m.cfg.GetProfileDotfilesDir()
-	widgetsBackupPath := filepath.Join(dotfilesDir, "widgets", "plasma", "plasmoids")
-
-	// Check if widgets directory exists
-	if _, err := os.Stat(widgetsBackupPath); os.IsNotExist(err) {
-		return nil, nil
-	}
-
-	// Get list of installed widgets
-	installed, err := widgets.ListInstalledWidgets(m.kdePaths.DataDir)
-	if err != nil {
-		return nil, err
-	}
-
-	installedMap := make(map[string]bool)
-	for _, w := range installed {
-		installedMap[w.Plugin] = true
-	}
-
-	// Find widgets in backup that are not installed
-	var toInstall []string
-	entries, err := os.ReadDir(widgetsBackupPath)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		widgetName := entry.Name()
-		// Skip system widgets
-		if strings.HasPrefix(widgetName, "org.kde.") {
-			continue
-		}
-
-		// Check if already installed
-		if !installedMap[widgetName] {
-			toInstall = append(toInstall, widgetName)
-		}
-	}
-
-	return toInstall, nil
-}
-
-// InstallCustomWidgets installs custom widgets from backup
-func (m *Manager) InstallCustomWidgets(dryRun bool) ([]string, error) {
-	dotfilesDir := m.cfg.GetProfileDotfilesDir()
-	return widgets.InstallWidgetsFromBackup(dotfilesDir, m.kdePaths.DataDir, dryRun)
+	return fileutil.CopyDir(src, dst)
 }
 
 // GetBackupSize calculates the total size of a backup profile in bytes
@@ -386,17 +274,7 @@ func (m *Manager) GetBackupSize(profile string) (uint64, error) {
 		return 0, fmt.Errorf("profile '%s' does not exist", profile)
 	}
 	
-	var totalSize uint64
-	err := filepath.Walk(profilePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() && !strings.Contains(path, "/.git/") {
-			totalSize += uint64(info.Size())
-		}
-		return nil
-	})
-	
+	totalSize, err := fileutil.CalculateSize(profilePath)
 	if err != nil {
 		return 0, fmt.Errorf("failed to calculate backup size: %w", err)
 	}
@@ -405,15 +283,7 @@ func (m *Manager) GetBackupSize(profile string) (uint64, error) {
 }
 
 // FormatSize formats bytes into human-readable string
+// Deprecated: Use fileutil.FormatSize instead
 func FormatSize(bytes uint64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := uint64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.2f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	return fileutil.FormatSize(bytes)
 }
