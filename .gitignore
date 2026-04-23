@@ -1,10 +1,7 @@
 ```
 # Compiled and build artifacts
-*.pyc
-__pycache__/
 *.o
 *.obj
-*.class
 *.exe
 *.dll
 *.so
@@ -15,34 +12,35 @@ __pycache__/
 # No build artifacts, dependencies, or temporary files detected in changes
 
 # Dependencies
+vendor/
 node_modules/
 venv/
 .venv/
-.env
-.env.local
-.env.*
-
-# Build directories
-dist/
+__pycache__/
+*.egg-info/
 build/
+dist/
 target/
-coverage/
-htmlcov/
-.mypy_cache/
-.pytest_cache/
 .gradle/
 
-# Editor/IDE files
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
-# Logs
-*.log
-
-# System files
+# OS
 .DS_Store
 Thumbs.db
 ```
