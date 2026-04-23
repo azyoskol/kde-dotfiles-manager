@@ -100,10 +100,21 @@ func (m *Manager) Backup(categories []string) error {
 
 	// Use WaitGroup to wait for all goroutines to complete
 	var wg sync.WaitGroup
-	errorChan := make(chan error, len(uniqueSrcPaths))
+	errorChan := make(chan error, len(uniqueSrcPaths)*2) // Buffer for potential duplicate errors
+
+	// Create a slice of work items to avoid closure issues
+	type workItem struct {
+		src  string
+		dst  string
+	}
+	
+	workItems := make([]workItem, 0, len(uniqueSrcPaths))
+	for srcPath, destPath := range uniqueSrcPaths {
+		workItems = append(workItems, workItem{src: srcPath, dst: destPath})
+	}
 
 	// Create goroutines for each unique source file
-	for srcPath, destPath := range uniqueSrcPaths {
+	for _, item := range workItems {
 		wg.Add(1)
 		go func(src, dst string) {
 			defer wg.Done()
@@ -132,7 +143,7 @@ func (m *Manager) Backup(categories []string) error {
 					errorChan <- fmt.Errorf("failed to copy file %s: %w", src, err)
 				}
 			}
-		}(srcPath, destPath)
+		}(item.src, item.dst)
 	}
 
 	// Start a separate goroutine to close the channel after all workers complete
